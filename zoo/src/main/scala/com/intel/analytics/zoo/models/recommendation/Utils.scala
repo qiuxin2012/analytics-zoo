@@ -62,14 +62,8 @@ object Utils {
     func
   }
 
-  def buckBucket1(bucketSize: Int): String => Int = {
-    col1: String =>
-      (Math.abs(col1.hashCode()) % bucketSize + 0)
-  }
-
-  def buckBucket3(bucketSize: Int): (String, String, String) => Int = {
-    (col1: String, col2: String, col3: String) =>
-      Math.abs((col1 + "_" + col2 + "_" + col3).hashCode()) % bucketSize + 0
+  def buckBuckets(bucketSize: Int)(col: String*): Int = {
+    Math.abs(col.reduce(_ + "_" + _).hashCode()) % bucketSize + 0
   }
 
   def bucketizedColumn(boundaries: Array[Float]): Float => Int = {
