@@ -168,14 +168,14 @@ object CensusWideAndDeep {
     val sample2batch = SampleToMiniBatch(batchSize)
     // Local optimizer
     val (trainRdds, validationRdds) = if (onSpark) {
-      (DataSet.array(trainpairFeatureRdds.map(x => x.sample).collect()) ->
-        sample2batch,
-      DataSet.array(validationpairFeatureRdds.map(x => x.sample).collect()) ->
-        sample2batch)
-    } else {
       (DataSet.rdd(trainpairFeatureRdds.map(x => x.sample).cache()) ->
         sample2batch,
         DataSet.rdd(validationpairFeatureRdds.map(x => x.sample).cache()) ->
+          sample2batch)
+    } else {
+      (DataSet.array(trainpairFeatureRdds.map(x => x.sample).collect()) ->
+        sample2batch,
+        DataSet.array(validationpairFeatureRdds.map(x => x.sample).collect()) ->
           sample2batch)
     }
 
