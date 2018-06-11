@@ -33,7 +33,7 @@ case class ScaleDetection() extends ImageProcessing {
     // Scale the bbox according to the original image size.
     val height = imageFeature.getOriginalHeight
     val width = imageFeature.getOriginalWidth
-    val result = BboxUtil.decodeRois(detection)
+    val result = pascalvoc.BboxUtil.decodeRois(detection)
     if (result.dim() == 2 && result.nElement() > 0) {
       // clipBoxes to [0, 1]
       clipBoxes(result.narrow(2, 3, 4))
@@ -68,7 +68,7 @@ case class ScaleDetection() extends ImageProcessing {
 case class DecodeOutput() extends ImageProcessing {
   override def transformMat(imageFeature: ImageFeature): Unit = {
     val detection = imageFeature[Tensor[Float]](ImageFeature.predict)
-    val result = BboxUtil.decodeRois(detection)
+    val result = pascalvoc.BboxUtil.decodeRois(detection)
     imageFeature(ImageFeature.predict) = result
   }
 }
