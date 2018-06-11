@@ -159,7 +159,7 @@ object Validator {
     val broadcastModel = ModelBroadcast().broadcast(rdd.sparkContext, model)
     val broadcastEvaluator = rdd.sparkContext.broadcast(evaluator)
     val broadcastTransformers = rdd.sparkContext.broadcast(preProcessor)
-    val recordsNum = rdd.sparkContext.longAccumulator("record number")
+    val recordsNum = rdd.sparkContext.accumulator(0L, "record number")
     val start = System.nanoTime()
     val output = rdd.mapPartitions(dataIter => {
       val localModel = broadcastModel.value()
