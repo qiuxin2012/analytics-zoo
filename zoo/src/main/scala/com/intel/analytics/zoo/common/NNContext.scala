@@ -142,6 +142,7 @@ object NNContext {
     }
     val sc = SparkContext.getOrCreate(zooConf)
     Engine.init
+//    Engine.init(1, 44, true)
     sc
   }
 
