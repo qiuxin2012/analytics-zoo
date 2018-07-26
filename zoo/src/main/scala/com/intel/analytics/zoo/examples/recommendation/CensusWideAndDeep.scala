@@ -190,6 +190,7 @@ object CensusWideAndDeep {
       .setValidation(Trigger.everyEpoch, validationRdds,
         Array(new Top1Accuracy[Float], new Loss[Float]()))
       .setCheckpoint(logdir + appName, Trigger.everyEpoch)
+//      .setCheckpoint("/tmp/models", Trigger.everyEpoch)
       .setEndWhen(Trigger.maxEpoch(maxEpoch))
       .optimize()
   }

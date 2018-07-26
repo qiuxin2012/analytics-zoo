@@ -24,7 +24,7 @@
         <scala.macros.version>2.1.0</scala.macros.version>
         <scalatest.version>2.2.4</scalatest.version>
         <spark.version>2.1.0</spark.version>
-        <bigdl.version>0.5.0</bigdl.version>
+        <bigdl.version>0.6.0</bigdl.version>
     </properties>
 
     <distributionManagement>
@@ -62,6 +62,7 @@
                 <scala.version>2.11.8</scala.version>
                 <scala.macros.version>2.1.0</scala.macros.version>
                 <bigdl.artifactId>bigdl-SPARK_${spark-version.project}</bigdl.artifactId>
+                <!--<bigdl.artifactId>bigdl</bigdl.artifactId>-->
             </properties>
         </profile>
 
