@@ -55,9 +55,9 @@ class NeuralCF[T: ClassTag](
     val model = Sequential[T]()
 
     val mlpUserTable = LookupTable[T](userCount, userEmbed)
+      .setInitMethod(RandomNormal(0, 0.01))
     val mlpItemTable = LookupTable[T](itemCount, itemEmbed)
-    mlpUserTable.setWeightsBias(Array(Tensor[T](userCount, userEmbed).randn(0, 0.1)))
-    mlpItemTable.setWeightsBias(Array(Tensor[T](itemCount, itemEmbed).randn(0, 0.1)))
+      .setInitMethod(RandomNormal(0, 0.01))
     val mlpEmbeddedLayer = Concat[T](2)
       .add(Sequential[T]().add(Select(2, 1)).add(mlpUserTable))
       .add(Sequential[T]().add(Select(2, 2)).add(mlpItemTable))
@@ -66,29 +66,34 @@ class NeuralCF[T: ClassTag](
     val linear1 = Linear[T](itemEmbed + userEmbed, hiddenLayers(0))
     mlpModel.add(linear1).add(ReLU())
     for (i <- 1 to hiddenLayers.length - 1) {
-      mlpModel.add(Linear(hiddenLayers(i - 1), hiddenLayers(i))).add(ReLU())
+      mlpModel.add(Linear(hiddenLayers(i - 1), hiddenLayers(i))
+        .setInitMethod(Xavier, Zeros)
+      ).add(ReLU())
     }
 
     if (includeMF) {
       require(mfEmbed > 0, s"please provide meaningful number of embedding units")
       val mfUserTable: LookupTable[T] = LookupTable[T](userCount, mfEmbed)
+        .setInitMethod(RandomNormal(0, 0.01))
       val mfItemTable = LookupTable[T](itemCount, mfEmbed)
-      mfUserTable.setWeightsBias(Array(Tensor[T](userCount, mfEmbed).randn(0, 0.1)))
-      mfItemTable.setWeightsBias(Array(Tensor[T](itemCount, mfEmbed).randn(0, 0.1)))
+        .setInitMethod(RandomNormal(0, 0.01))
       val mfEmbeddedLayer = ConcatTable()
         .add(Sequential[T]().add(Select(2, 1)).add(mfUserTable))
         .add(Sequential[T]().add(Select(2, 2)).add(mfItemTable))
       val mfModel = Sequential[T]()
       mfModel.add(mfEmbeddedLayer).add(CMulTable())
       val concatedModel = Concat(2).add(mfModel).add(mlpModel)
+      val stdv = math.sqrt(3.toDouble / (mfEmbed + hiddenLayers.last))
       model.add(concatedModel)
-        .add(Linear(mfEmbed + hiddenLayers.last, numClasses))
+        .add(Linear(mfEmbed + hiddenLayers.last, numClasses)
+          .setInitMethod(RandomUniform(-stdv, stdv), Zeros))
     }
     else {
       model.add(mlpModel).
-        add(Linear(hiddenLayers.last, numClasses))
+        add(Linear(hiddenLayers.last, numClasses)
+          .setInitMethod(Xavier, Zeros))
     }
-    model.add(LogSoftMax[T]())
+    model.add(Sigmoid[T]())
 
     model.asInstanceOf[AbstractModule[Tensor[T], Tensor[T], T]]
   }

@@ -61,7 +61,7 @@
                 <scala.major.version>2.11</scala.major.version>
                 <scala.version>2.11.8</scala.version>
                 <scala.macros.version>2.1.0</scala.macros.version>
-                <bigdl.artifactId>bigdl</bigdl.artifactId>
+                <bigdl.artifactId>bigdl-SPARK_${spark-version.project}</bigdl.artifactId>
             </properties>
         </profile>
 
@@ -231,7 +231,7 @@
         <dependency>
             <groupId>com.intel.analytics.bigdl</groupId>
             <artifactId>${bigdl.artifactId}</artifactId>
-            <version>0.7.0-SNAPSHOT</version>
+            <version>${bigdl.version}</version>
             <scope>${bigdl-scope}</scope>
         </dependency>
         <dependency>
