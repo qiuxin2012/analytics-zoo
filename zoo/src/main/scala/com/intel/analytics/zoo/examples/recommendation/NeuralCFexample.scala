@@ -162,7 +162,7 @@ object NeuralCFexample {
 //      criterion = BCECriterion[Float](),
 //      batchSize = param.batchSize)
 
-    val optimMethod = new ParallelAdam[Float](
+    val optimMethod = new Adam[Float](
       learningRate = param.learningRate,
       learningRateDecay = param.learningRateDecay)
 //    val optimMethod = new ParallelAdam[Float](
