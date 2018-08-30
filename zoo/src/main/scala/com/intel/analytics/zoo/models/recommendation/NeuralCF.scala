@@ -59,8 +59,8 @@ class NeuralCF[T: ClassTag](
     val mlpItemTable = LookupTable[T](itemCount, itemEmbed)
       .setInitMethod(RandomNormal(0, 0.01))
     val mlpEmbeddedLayer = Concat[T](2)
-      .add(Sequential[T]().add(Select(2, 1)).add(mlpUserTable))
-      .add(Sequential[T]().add(Select(2, 2)).add(mlpItemTable))
+      .add(Sequential[T]().add(Squeeze(1)).add(Select(2, 1)).add(mlpUserTable))
+      .add(Sequential[T]().add(Squeeze(1)).add(Select(2, 2)).add(mlpItemTable))
     val mlpModel = Sequential[T]()
     mlpModel.add(mlpEmbeddedLayer)
     val linear1 = Linear[T](itemEmbed + userEmbed, hiddenLayers(0))
@@ -78,8 +78,8 @@ class NeuralCF[T: ClassTag](
       val mfItemTable = LookupTable[T](itemCount, mfEmbed)
         .setInitMethod(RandomNormal(0, 0.01))
       val mfEmbeddedLayer = ConcatTable()
-        .add(Sequential[T]().add(Select(2, 1)).add(mfUserTable))
-        .add(Sequential[T]().add(Select(2, 2)).add(mfItemTable))
+        .add(Sequential[T]().add(Squeeze(1)).add(Select(2, 1)).add(mfUserTable))
+        .add(Sequential[T]().add(Squeeze(1)).add(Select(2, 2)).add(mfItemTable))
       val mfModel = Sequential[T]()
       mfModel.add(mfEmbeddedLayer).add(CMulTable())
       val concatedModel = Concat(2).add(mfModel).add(mlpModel)
@@ -89,9 +89,10 @@ class NeuralCF[T: ClassTag](
           .setInitMethod(RandomUniform(-stdv, stdv), Zeros))
     }
     else {
+      val stdv = math.sqrt(3.toDouble / hiddenLayers.last)
       model.add(mlpModel).
         add(Linear(hiddenLayers.last, numClasses)
-          .setInitMethod(Xavier, Zeros))
+          .setInitMethod(RandomUniform(-stdv, stdv), Zeros))
     }
     model.add(Sigmoid[T]())
 
