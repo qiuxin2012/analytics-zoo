@@ -1,5 +1,6 @@
 package com.intel.analytics.zoo.examples.recommendation
 
+import java.util
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.intel.analytics.bigdl.dataset.{LocalDataSet, MiniBatch}
@@ -8,11 +9,14 @@ import com.intel.analytics.bigdl.utils.{Engine, RandomGenerator}
 
 import scala.util.Random
 
-class NCFDataSet[MiniBatch[Float]] private[dataset](
+class NCFDataSet private[dataset](
     trainSet: Seq[(Int, Set[Int])],
     valPos: Map[Int, Int],
     train: Seq[(Int, Set[Int])],
-    trainNegatives: Int, batchSize: Int) extends LocalDataSet[MiniBatch[Float]] {
+    trainNegatives: Int,
+    batchSize: Int,
+    userCount: Int,
+    itemCount: Int) extends LocalDataSet[MiniBatch[Float]] {
   val input = Tensor[Float](batchSize, 2)
   val label = Tensor[Float](batchSize, 1)
   val miniBatch = MiniBatch(Array(input), Array(label))
@@ -21,39 +25,62 @@ class NCFDataSet[MiniBatch[Float]] private[dataset](
   // origin set use to random train negatives
   val originSet = trainSet.map(v => (v._1, v._2 + valPos(v._1)))
 
-  val trainBuffer = new Array[Float](trainSize * 2)
-  NCFDataSet.copy(trainSet, trainBuffer)
+  val trainPositiveBuffer = new Array[Float](trainSize * 2)
+  NCFDataSet.copy(trainSet, trainPositiveBuffer)
 
-  val buffer = new Array[Float](trainSize * (1 + trainNegatives) * 2 )
+  val inputBuffer = new Array[Float](trainSize * (1 + trainNegatives) * 2 )
+  val labelBuffer = new Array[Float](trainSize * (1 + trainNegatives))
 
   override def shuffle(): Unit = {
-    RandomGenerator.shuffle(buffer)
+    NCFDataSet.generateNegativeItems(originSet,
+                              inputBuffer,
+                              trainNegatives,
+      4, // TODO
+                              itemCount)
+    System.arraycopy(trainPositiveBuffer, 0, inputBuffer,
+      trainSize * trainNegatives * 2, trainSize * 2)
+    util.Arrays.fill(labelBuffer, 0, trainSize * trainNegatives, 0)
+    util.Arrays.fill(labelBuffer, trainSize * trainNegatives, trainSize * (1 + trainNegatives), 0)
+    NCFDataSet.shuffle(inputBuffer, labelBuffer)
   }
 
   override def data(train: Boolean): Iterator[MiniBatch[Float]] = {
     new Iterator[MiniBatch[Float]] {
       private val index = new AtomicInteger()
+      private val numOfSample = inputBuffer.length / 2
+      private val numMiniBatch = math.ceil(numOfSample.toFloat / batchSize)
 
       override def hasNext: Boolean = {
         if (train) {
           true
         } else {
-          index.get() < buffer.length
+          index.get() < inputBuffer.length
         }
       }
 
       override def next(): MiniBatch[Float] = {
         val curIndex = index.getAndIncrement()
-        if (train || curIndex < buffer.length) {
+        if (train || curIndex < numMiniBatch - 1) {
+          System.arraycopy(inputBuffer, curIndex * 2 * batchSize,
+            input.storage().array(), 0, batchSize * 2)
+          System.arraycopy(labelBuffer, curIndex * batchSize,
+            input.storage().array(), 0, batchSize)
+          miniBatch
+        } else if (curIndex == numMiniBatch - 1) {
+          // TODO
+          System.arraycopy(inputBuffer, curIndex * 2 * batchSize,
+            input.storage().array(), 0, batchSize * 2)
+          System.arraycopy(labelBuffer, curIndex * batchSize,
+            input.storage().array(), 0, batchSize)
           miniBatch
         } else {
-          null.asInstanceOf[MiniBatch[Float]]
+          null
         }
       }
     }
   }
 
-  override def size(): Long = buffer.length
+  override def size(): Long = inputBuffer.length / 2
 }
 
 object NCFDataSet {
@@ -77,26 +104,30 @@ object NCFDataSet {
 
   }
 
-  def shuffle(buffer: Array[Float]): Unit = {
+  def shuffle(inputBuffer: Array[Float], labelBuffer: Array[Float]): Unit = {
     var i = 0
-    val length = buffer.length / 2
+    val length = inputBuffer.length / 2
     while (i < length) {
       val exchange = RandomGenerator.RNG.uniform(0, length - i).toInt + i
-      val tmp1 = buffer(exchange * 2)
-      val tmp2 = buffer(exchange * 2 + 1)
+      val tmp1 = inputBuffer(exchange * 2)
+      val tmp2 = inputBuffer(exchange * 2 + 1)
+      inputBuffer(exchange * 2) = inputBuffer(i * 2)
+      inputBuffer(exchange * 2 + 1) = inputBuffer(i * 2 + 1)
+      inputBuffer(2 * i) = tmp1
+      inputBuffer(2 * i + 1) = tmp2
 
-      buffer(exchange * 2) = buffer(i * 2)
-      buffer(exchange * 2 + 1) = buffer(i * 2 + 1)
-      buffer(2 * i) = tmp1
-      buffer(2 * i + 1) = exchange + 1
+      val labelTmp = labelBuffer(exchange)
+      inputBuffer(exchange) = inputBuffer(i)
+      inputBuffer(exchange) = labelTmp
       i += 1
     }
   }
 
-  def generateNegatives(originSet: Seq[(Int, Set[Int])],
+  def generateNegativeItems(originSet: Seq[(Int, Set[Int])],
                         buffer: Array[Float],
                         trainNeg: Int,
-                        processes: Int): Unit = {
+                        processes: Int,
+                        itemCount: Int): Unit = {
     val size = Math.ceil(originSet.size / processes).toInt
     val lastOffset = originSet.size - size * (processes - 1)
     val processesOffset = Array.tabulate[Int](processes)(_ * size)
@@ -122,7 +153,7 @@ object NCFDataSet {
     }
 
     numItemAndOffset.foreach{v =>
-      val rand = new Random(System.currentTimeMillis())
+      val rand = new Random(System.nanoTime())
       val length = v._1
       var offset = v._2
       val numItem = v._3
@@ -132,15 +163,26 @@ object NCFDataSet {
         val userId = originSet(offset)._1
         val items = originSet(offset)._2
 
+        while(itemOffset < v._4 + numItem) {
+          var i = 0
+          while (i < trainNeg) {
+            var negItem = rand.nextInt(itemCount) + 1
+            while (items.contains(negItem)) {
+              negItem = rand.nextInt(itemCount) + 1
+            }
+            val negItemOffset = itemOffset * 2 * trainNeg + i * 2
+            buffer(negItemOffset) = userId
+            buffer(negItemOffset + 1) = negItem
 
+            i += 1
+          }
+
+          itemOffset += 1
+        }
 
         offset += 1
       }
-
     }
-
-
-
 
   }
 }
