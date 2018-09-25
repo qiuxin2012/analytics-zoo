@@ -115,13 +115,43 @@ object NeuralCFexample {
     val sc = NNContext.initNNContext(conf)
     val sqlContext = SQLContext.getOrCreate(sc)
 
+    val optimMethod = Map(
+      "embeddings" -> new EmbeddingAdam2[Float](
+        learningRate = param.learningRate,
+        learningRateDecay = param.learningRateDecay),
+      "linears" -> new ParallelAdam[Float](
+        learningRate = param.learningRate,
+        learningRateDecay = param.learningRateDecay))
+    println(s"${param.learningRate}, ${param.learningRateDecay}")
+    val validateBatchSize = optimMethod("linears").asInstanceOf[ParallelAdam[Float]].parallelNum
+    val inputDir = param.inputDir
 
-    val (ratings, userCount, itemCount, itemMapping) =
-      loadPublicData(sqlContext, param.inputDir, param.dataset)
-    println(s"${userCount} ${itemCount}")
+//    val (ratings, userCount, itemCount, itemMapping) =
+//      loadPublicData(sqlContext, param.inputDir, param.dataset)
+//    ratings.cache()
+//    println(s"${userCount} ${itemCount}")
+
+//    val (trainDataFrame, valDataFrame) = generateTrainValData(ratings, userCount, itemCount,
+//      trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
+//
+//    val isImplicit = false
+//    val trainpairFeatureRdds =
+//      assemblyFeature(isImplicit, trainDataFrame, userCount, itemCount)
+//    val validationpairFeatureRdds =
+//      assemblyValFeature(isImplicit, valDataFrame, userCount, itemCount, param.valNegtiveNum)
+//    val trainRdds = trainpairFeatureRdds.map(x => x.sample)
+//    val validationRdds = validationpairFeatureRdds.map(x => x.sample).cache()
+// println(s"Train set ${trainRdds.count()} records")
+//    println(s"Val set ${validationRdds.count()} records")
+//    val valDataset = DataSet.array(validationRdds.collect()) -> SampleToMiniBatch(validateBatchSize)
+
+//    val trainDataset = (DataSet.array[Sample[Float]](trainRdds.collect()) ->
+//      SampleToMiniBatch(param.batchSize)).toLocal()
+//    trainDataset.shuffle()
+    val userCount = 138493
+    val itemCount = 26744
     val hiddenLayers = param.layers.split(",").map(_.toInt)
 
-    val isImplicit = false
     val ncf = NeuralCFV2[Float](
       userCount = userCount,
       itemCount = itemCount,
@@ -130,58 +160,39 @@ object NeuralCFexample {
       itemEmbed = hiddenLayers(0) / 2,
       hiddenLayers = hiddenLayers.slice(1, hiddenLayers.length),
       mfEmbed = param.numFactors)
-//    val pyBigDL = new PythonBigDL[Float]()
-//    val pytorchW = com.intel.analytics.bigdl.utils.File
-//      .load[util.HashMap[String, JTensor]]("/tmp/pyBigDL/pytorch_weight.obj")
-//      .asScala.map(v => (v._1, pyBigDL.toTensor(v._2)))
-//    val embeddingNames = Array("mfUserEmbedding", "mfItemEmbedding",
-//      "mlpUserEmbedding", "mlpItemEmbedding")
-//    val fcNames = Array("fc256->256", "fc256->128",
-//      "fc128->64", "fc128->1")
-//    embeddingNames.foreach{name =>
-//      ncf.ncfModel(name).get.setWeightsBias(Array(pytorchW(s"${name}_weight")))
-//    }
-//    fcNames.foreach{name =>
-//      ncf.ncfModel(name).get.setWeightsBias(Array(
-//        pytorchW(s"${name}_weight"), pytorchW(s"${name}_bias")))
-//    }
-//
-//    println(ncf)
+
+    val pyBigDL = new PythonBigDL[Float]()
+    val pytorchW = com.intel.analytics.bigdl.utils.File
+      .load[util.HashMap[String, JTensor]]("pytorch_weight.obj")
+      .asScala.map(v => (v._1, pyBigDL.toTensor(v._2)))
+    val embeddingNames = Array("mfUserEmbedding", "mfItemEmbedding",
+      "mlpUserEmbedding", "mlpItemEmbedding")
+    val fcNames = Array("fc256->256", "fc256->128",
+      "fc128->64", "fc128->1")
+    embeddingNames.foreach{name =>
+      ncf.ncfModel(name).get.setWeightsBias(Array(pytorchW(s"${name}_weight")))
+    }
+    fcNames.foreach{name =>
+      ncf.ncfModel(name).get.setWeightsBias(Array(
+        pytorchW(s"${name}_weight"), pytorchW(s"${name}_bias")))
+    }
+
+    println(ncf)
 
     println(s"parameter length: ${ncf.parameters()._1.map(_.nElement()).sum}")
 
-    ratings.cache()
-    val (trainDataFrame, valDataFrame) = generateTrainValData(ratings, userCount, itemCount,
-      trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
 
-    println("local from local")
-    val trainpairFeatureRdds =
-      assemblyFeature(isImplicit, trainDataFrame, userCount, itemCount)
-    val validationpairFeatureRdds =
-      assemblyValFeature(isImplicit, valDataFrame, userCount, itemCount, param.valNegtiveNum)
+//    val trainDataset = (DataSet.array[MiniBatch[Float]](loadPytorchTrain("0.txt", param.batchSize))).toLocal()
+//    val valDataset = (DataSet.array[Sample[Float]](loadPytorchTest("test-ratings.csv",
+//      "test-negative.csv")) -> SampleToMiniBatch[Float](validateBatchSize)).toLocal()
 
-    val trainRdds = trainpairFeatureRdds.map(x => x.sample)
-    val validationRdds = validationpairFeatureRdds.map(x => x.sample).cache()
-    // println(s"Train set ${trainRdds.count()} records")
-//    println(s"Val set ${validationRdds.count()} records")
+    val trainDataset = (DataSet.array[MiniBatch[Float]](
+      ConvertToBinary.loadTrainBinary(inputDir + "/0", param.batchSize))).toLocal()
+    val valDataset = (DataSet.array[Sample[Float]](
+      ConvertToBinary.loadTestBinary(inputDir + "/test"))
+      -> SampleToMiniBatch[Float](validateBatchSize)).toLocal()
 
-    val optimMethod = Map(
-      "embeddings" -> new ParallelAdam[Float](
-        learningRate = param.learningRate,
-        learningRateDecay = param.learningRateDecay),
-      "linears" -> new ParallelAdam[Float](
-        learningRate = param.learningRate,
-        learningRateDecay = param.learningRateDecay))
-    println(s"${param.learningRate}, ${param.learningRateDecay}")
-
-    val validateBatchSize = optimMethod("linears").parallelNum
-    val valDataset = DataSet.array(validationRdds.collect()) -> SampleToMiniBatch(validateBatchSize)
-
-    val trainDataset = (DataSet.array[Sample[Float]](trainRdds.collect()) ->
-      SampleToMiniBatch(param.batchSize)).toLocal()
-    trainDataset.shuffle()
-
-    val optimizer = new NCFOptimizer[Float](ncf,
+    val optimizer = new NCFOptimizer2[Float](ncf,
       trainDataset, BCECriterion[Float]())
 
     optimizer
@@ -197,9 +208,13 @@ object NeuralCFexample {
     while(e <= param.nEpochs) {
       println(s"Starting epoch $e/${param.nEpochs}")
       val endTrigger = Trigger.maxEpoch(e)
-      val newTrainDataset = (DataSet.array[Sample[Float]](
-        trainRdds.collect()) -> SampleToMiniBatch(param.batchSize)).toLocal()
-      newTrainDataset.shuffle()
+      val newTrainDataset = (DataSet.array[MiniBatch[Float]](
+        ConvertToBinary.loadTrainBinary(inputDir + s"/${e - 1}", param.batchSize))).toLocal()
+//      val newTrainDataset = (DataSet.array[MiniBatch[Float]](
+//        loadPytorchTrain(s"${e - 1}.txt", param.batchSize))).toLocal()
+//      val newTrainDataset = (DataSet.array[Sample[Float]](
+//        trainRdds.collect()) -> SampleToMiniBatch(param.batchSize)).toLocal()
+//      newTrainDataset.shuffle()
 
       optimizer
         .setTrainData(newTrainDataset)
@@ -211,6 +226,7 @@ object NeuralCFexample {
   }
 
   def loadPytorchTest(posFile: String, negFile: String): Array[Sample[Float]] = {
+    val startTime = System.currentTimeMillis()
     val testSet = new ArrayBuffer[Sample[Float]]()
     val positives = Source.fromFile(posFile).getLines()
     val negatives = Source.fromFile(negFile).getLines()
@@ -235,12 +251,12 @@ object NeuralCFexample {
 
       testSet.append(Sample(testFeature, testLabel))
     }
-
+    println(s"load path: ${System.currentTimeMillis() - startTime}ms")
     testSet.toArray
   }
 
   def loadPytorchTrain(path: String, batchSize: Int = 2048): Array[MiniBatch[Float]] = {
-    val file = Source.fromFile(path)
+    val startTime = System.currentTimeMillis()
     val lines = Source.fromFile(path).getLines()
     val miniBatches = new ArrayBuffer[MiniBatch[Float]]()
     while(lines.hasNext) {
@@ -254,7 +270,7 @@ object NeuralCFexample {
         target.setValue(i, 1, line(2))
         i += 1
       }
-      val miniBatch = if (i <= batchSize) {
+      if (i <= batchSize) {
         input.narrow(1, i, batchSize + 1 - i).copy(
           miniBatches(0).getInput().toTensor.narrow(1, 1, batchSize + 1 - i))
         target.narrow(1, i, batchSize + 1 - i).copy(
@@ -264,6 +280,7 @@ object NeuralCFexample {
         miniBatches.append(MiniBatch(input, target))
       }
     }
+    println(s"load path: ${System.currentTimeMillis() - startTime}ms")
     miniBatches.toArray
   }
 
@@ -369,64 +386,6 @@ object NeuralCFexample {
   }
 
 
-  def generateTrainValSet(
-        rating: DataFrame,
-        userCount: Int,
-        itemCount: Int,
-        trainNegNum: Int = 4,
-        valNegNum: Int = 100): (Map[Int, Int], Array[(Int, Set[Int])],
-          Array[Sample[Float]]) = {
-    val maxTimeStep = rating.groupBy("userId").max("timestamp").collect().map(r => (r.getInt(0), r.getInt(1))).toMap
-    val bcT = rating.sparkSession.sparkContext.broadcast(maxTimeStep)
-    val evalPos = rating.filter(r => bcT.value.apply(r.getInt(0)) == r.getInt(3)).dropDuplicates("userId")
-        .rdd.map(pos => (pos.getInt(0), pos.getInt(1))).collect().toMap
-
-    val groupedRdd = rating.rdd.groupBy(_.getAs[Int]("userId")).cache()
-    val negRdd = groupedRdd.map{v =>
-        val userId = v._1
-        val items = scala.collection.mutable.Set(v._2.map(_.getAs[Int]("itemId")).toArray: _*)
-        val gen = new Random(userId)
-        var i = 0
-
-        val negs = new Array[Int](valNegNum)
-        // gen negative sample to validation
-        while(i < valNegNum) {
-          val negItem = gen.nextInt(itemCount) + 1
-          if (!items.contains(negItem)) {
-            negs(i) = negItem
-            i += 1
-          }
-        }
-
-      (userId, negs)
-    }
-
-    val trainSet = groupedRdd.map(v => (v._1, v._2.map(_.getInt(1))
-      .filter(_ == evalPos(v._1)).toSet)).collect()
-
-    val valSamples = negRdd.collect().map(record => {
-      val userId = record._1
-      val negs = record._2
-      val posItem = evalPos(userId)
-      val distinctNegs = negs.distinct
-      val testFeature = Tensor[Float](1 + negs.size, 2)
-      testFeature.select(2, 1).fill(userId + 1)
-      val testLabel = Tensor[Float](1 + negs.size).fill(0)
-      var i = 1
-      while (i <= distinctNegs.size) {
-        testFeature.setValue(i, 2, distinctNegs(i - 1) + 1)
-        i += 1
-      }
-      testFeature.setValue(i, 2, posItem + 1)
-      testLabel.setValue(i, 1)
-      testFeature.narrow(1, i + 1, negs.size - distinctNegs.size).fill(1)
-      testLabel.narrow(1, i + 1, negs.size - distinctNegs.size).fill(-1)
-
-      Sample(testFeature, testLabel)
-    })
-
-    (evalPos, trainSet, valSamples)
-  }
 
 
   def assemblyFeature(isImplicit: Boolean = false,

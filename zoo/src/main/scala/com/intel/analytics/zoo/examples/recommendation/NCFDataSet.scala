@@ -9,17 +9,13 @@ import com.intel.analytics.bigdl.utils.{Engine, RandomGenerator}
 
 import scala.util.Random
 
-class NCFDataSet private[dataset](
+class NCFDataSet (
     trainSet: Seq[(Int, Set[Int])],
     valPos: Map[Int, Int],
-    train: Seq[(Int, Set[Int])],
     trainNegatives: Int,
     batchSize: Int,
     userCount: Int,
     itemCount: Int) extends LocalDataSet[MiniBatch[Float]] {
-  val input = Tensor[Float](batchSize, 2)
-  val label = Tensor[Float](batchSize, 1)
-  val miniBatch = MiniBatch(Array(input), Array(label))
 
   val trainSize = trainSet.map(_._2.size).sum
   // origin set use to random train negatives
@@ -40,38 +36,41 @@ class NCFDataSet private[dataset](
     System.arraycopy(trainPositiveBuffer, 0, inputBuffer,
       trainSize * trainNegatives * 2, trainSize * 2)
     util.Arrays.fill(labelBuffer, 0, trainSize * trainNegatives, 0)
-    util.Arrays.fill(labelBuffer, trainSize * trainNegatives, trainSize * (1 + trainNegatives), 0)
+    util.Arrays.fill(labelBuffer, trainSize * trainNegatives, trainSize * (1 + trainNegatives), 1)
     NCFDataSet.shuffle(inputBuffer, labelBuffer)
   }
 
   override def data(train: Boolean): Iterator[MiniBatch[Float]] = {
     new Iterator[MiniBatch[Float]] {
+      val input = Tensor[Float](batchSize, 2)
+      val label = Tensor[Float](batchSize, 1)
+      val miniBatch = MiniBatch(Array(input), Array(label))
+
       private val index = new AtomicInteger()
       private val numOfSample = inputBuffer.length / 2
-      private val numMiniBatch = math.ceil(numOfSample.toFloat / batchSize)
+      private val numMiniBatch = math.ceil(numOfSample.toFloat / batchSize).toInt
 
       override def hasNext: Boolean = {
-        if (train) {
-          true
-        } else {
-          index.get() < inputBuffer.length
-        }
+        index.get() < inputBuffer.length
       }
 
       override def next(): MiniBatch[Float] = {
-        val curIndex = index.getAndIncrement()
-        if (train || curIndex < numMiniBatch - 1) {
+        val curIndex = index.getAndIncrement()  % numMiniBatch
+        if (curIndex < numMiniBatch - 1) {
           System.arraycopy(inputBuffer, curIndex * 2 * batchSize,
             input.storage().array(), 0, batchSize * 2)
           System.arraycopy(labelBuffer, curIndex * batchSize,
-            input.storage().array(), 0, batchSize)
+            label.storage().array(), 0, batchSize)
           miniBatch
         } else if (curIndex == numMiniBatch - 1) {
           // TODO
+          val restItem = numOfSample - curIndex * batchSize
           System.arraycopy(inputBuffer, curIndex * 2 * batchSize,
-            input.storage().array(), 0, batchSize * 2)
+            input.storage().array(), 0, restItem * 2)
           System.arraycopy(labelBuffer, curIndex * batchSize,
-            input.storage().array(), 0, batchSize)
+            label.storage().array(), 0, restItem)
+          input.resize(restItem, 2)
+          label.resize(restItem, 1)
           miniBatch
         } else {
           null
@@ -117,8 +116,8 @@ object NCFDataSet {
       inputBuffer(2 * i + 1) = tmp2
 
       val labelTmp = labelBuffer(exchange)
-      inputBuffer(exchange) = inputBuffer(i)
-      inputBuffer(exchange) = labelTmp
+      labelBuffer(exchange) = labelBuffer(i)
+      labelBuffer(i) = labelTmp
       i += 1
     }
   }
@@ -129,7 +128,7 @@ object NCFDataSet {
                         processes: Int,
                         itemCount: Int): Unit = {
     val size = Math.ceil(originSet.size / processes).toInt
-    val lastOffset = originSet.size - size * (processes - 1)
+    val lastOffset = size * (processes - 1)
     val processesOffset = Array.tabulate[Int](processes)(_ * size)
 
     val numItems = processesOffset.map{offset =>
@@ -141,15 +140,15 @@ object NCFDataSet {
       var numItem = 0
       var i = 0
       while (i < length) {
-        numItem += originSet(i + offset)._2.size
+        numItem += originSet(i + offset)._2.size - 1 // discard validation positive
         i += 1
       }
       (length, offset, numItem)
     }
 
-    val numItemAndOffset = (0 to processes).map{p =>
+    val numItemAndOffset = (0 until processes).map{p =>
       (numItems(p)._1, numItems(p)._2,
-        numItems(p)._3, numItems.slice(0, p + 1).map(_._3).sum)
+        numItems(p)._3, numItems.slice(0, p).map(_._3).sum)
     }
 
     numItemAndOffset.foreach{v =>
