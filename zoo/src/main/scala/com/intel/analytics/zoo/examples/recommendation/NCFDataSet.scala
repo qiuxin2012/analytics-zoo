@@ -1,12 +1,15 @@
 package com.intel.analytics.zoo.examples.recommendation
 
 import java.util
+import java.util.concurrent.{Executors, ThreadFactory}
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.intel.analytics.bigdl.dataset.{LocalDataSet, MiniBatch}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.utils.{Engine, RandomGenerator}
 
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.Random
 
 class NCFDataSet (
@@ -15,7 +18,9 @@ class NCFDataSet (
     trainNegatives: Int,
     batchSize: Int,
     userCount: Int,
-    itemCount: Int) extends LocalDataSet[MiniBatch[Float]] {
+    itemCount: Int,
+    var seed: Int = 1,
+    val processes: Int = 10) extends LocalDataSet[MiniBatch[Float]] {
 
   val trainSize = trainSet.map(_._2.size).sum
   // origin set use to random train negatives
@@ -31,13 +36,15 @@ class NCFDataSet (
     NCFDataSet.generateNegativeItems(originSet,
                               inputBuffer,
                               trainNegatives,
-      4, // TODO
-                              itemCount)
+      processes, // TODO
+                              itemCount,
+      seed)
+    seed += itemCount
     System.arraycopy(trainPositiveBuffer, 0, inputBuffer,
       trainSize * trainNegatives * 2, trainSize * 2)
     util.Arrays.fill(labelBuffer, 0, trainSize * trainNegatives, 0)
     util.Arrays.fill(labelBuffer, trainSize * trainNegatives, trainSize * (1 + trainNegatives), 1)
-    NCFDataSet.shuffle(inputBuffer, labelBuffer)
+    NCFDataSet.shuffle(inputBuffer, labelBuffer, seed)
   }
 
   override def data(train: Boolean): Iterator[MiniBatch[Float]] = {
@@ -51,7 +58,7 @@ class NCFDataSet (
       private val numMiniBatch = math.ceil(numOfSample.toFloat / batchSize).toInt
 
       override def hasNext: Boolean = {
-        index.get() < inputBuffer.length
+        index.get() < numMiniBatch
       }
 
       override def next(): MiniBatch[Float] = {
@@ -83,6 +90,22 @@ class NCFDataSet (
 }
 
 object NCFDataSet {
+  val context = new ExecutionContext {
+    val threadPool = Executors.newFixedThreadPool(56, new ThreadFactory {
+      override def newThread(r: Runnable): Thread = {
+        val t = Executors.defaultThreadFactory().newThread(r)
+        t.setDaemon(true)
+        t
+      }
+    })
+
+    def execute(runnable: Runnable) {
+      threadPool.submit(runnable)
+    }
+
+    def reportFailure(t: Throwable) {}
+  }
+
   def copy(trainSet: Seq[(Int, Set[Int])], trainBuffer: Array[Float]): Unit = {
     var i = 0
     var offset = 0
@@ -103,11 +126,14 @@ object NCFDataSet {
 
   }
 
-  def shuffle(inputBuffer: Array[Float], labelBuffer: Array[Float]): Unit = {
+  def shuffle(inputBuffer: Array[Float],
+              labelBuffer: Array[Float],
+              seed: Int): Unit = {
+    val rand = new Random(seed)
     var i = 0
     val length = inputBuffer.length / 2
     while (i < length) {
-      val exchange = RandomGenerator.RNG.uniform(0, length - i).toInt + i
+      val exchange = rand.nextInt(length - i) + i
       val tmp1 = inputBuffer(exchange * 2)
       val tmp2 = inputBuffer(exchange * 2 + 1)
       inputBuffer(exchange * 2) = inputBuffer(i * 2)
@@ -126,7 +152,8 @@ object NCFDataSet {
                         buffer: Array[Float],
                         trainNeg: Int,
                         processes: Int,
-                        itemCount: Int): Unit = {
+                        itemCount: Int,
+                            seed: Int): Unit = {
     val size = Math.ceil(originSet.size / processes).toInt
     val lastOffset = size * (processes - 1)
     val processesOffset = Array.tabulate[Int](processes)(_ * size)
@@ -148,40 +175,41 @@ object NCFDataSet {
 
     val numItemAndOffset = (0 until processes).map{p =>
       (numItems(p)._1, numItems(p)._2,
-        numItems(p)._3, numItems.slice(0, p).map(_._3).sum)
+        numItems.slice(0, p).map(_._3).sum * trainNeg)
     }
 
-    numItemAndOffset.foreach{v =>
-      val rand = new Random(System.nanoTime())
-      val length = v._1
-      var offset = v._2
-      val numItem = v._3
-      var itemOffset = v._4
+    numItemAndOffset.map(v => Future {
+      try {
+        val length = v._1
+        var offset = v._2
+        var itemOffset = v._3
+        val rand = new Random(offset + seed)
 
-      while(offset < v._2 + length) {
-        val userId = originSet(offset)._1
-        val items = originSet(offset)._2
-
-        while(itemOffset < v._4 + numItem) {
+        while(offset < v._2 + length) {
+          val userId = originSet(offset)._1
+          val items = originSet(offset)._2
           var i = 0
-          while (i < trainNeg) {
+          while (i < (items.size - 1) * trainNeg) {
             var negItem = rand.nextInt(itemCount) + 1
             while (items.contains(negItem)) {
               negItem = rand.nextInt(itemCount) + 1
             }
-            val negItemOffset = itemOffset * 2 * trainNeg + i * 2
+            val negItemOffset = itemOffset * 2
             buffer(negItemOffset) = userId
             buffer(negItemOffset + 1) = negItem
 
             i += 1
+            itemOffset += 1
           }
-
-          itemOffset += 1
+          offset += 1
         }
-
-        offset += 1
+      } catch {
+        case t : Throwable =>
+          //            logger.error("Error: " + ExceptionUtils.getStackTrace(t))
+          throw t
       }
-    }
-
+    }(context)).map(future => {
+      Await.result(future, Duration.Inf)
+    })
   }
 }

@@ -28,7 +28,7 @@ import com.intel.analytics.bigdl.optim._
 import com.intel.analytics.bigdl.python.api.{JTensor, PythonBigDL}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.utils.{Engine, File, T}
+import com.intel.analytics.bigdl.utils.{Engine, File, RandomGenerator, T}
 import com.intel.analytics.bigdl.visualization.{TrainSummary, ValidationSummary}
 import com.intel.analytics.zoo.common.NNContext
 import com.intel.analytics.zoo.models.recommendation.{NeuralCF, UserItemFeature, Utils}
@@ -151,6 +151,7 @@ object NeuralCFexample {
     val userCount = 138493
     val itemCount = 26744
     val hiddenLayers = param.layers.split(",").map(_.toInt)
+    RandomGenerator.RNG.setSeed(1)
 
     val ncf = NeuralCFV2[Float](
       userCount = userCount,
@@ -161,21 +162,21 @@ object NeuralCFexample {
       hiddenLayers = hiddenLayers.slice(1, hiddenLayers.length),
       mfEmbed = param.numFactors)
 
-    val pyBigDL = new PythonBigDL[Float]()
-    val pytorchW = com.intel.analytics.bigdl.utils.File
-      .load[util.HashMap[String, JTensor]]("pytorch_weight.obj")
-      .asScala.map(v => (v._1, pyBigDL.toTensor(v._2)))
-    val embeddingNames = Array("mfUserEmbedding", "mfItemEmbedding",
-      "mlpUserEmbedding", "mlpItemEmbedding")
-    val fcNames = Array("fc256->256", "fc256->128",
-      "fc128->64", "fc128->1")
-    embeddingNames.foreach{name =>
-      ncf.ncfModel(name).get.setWeightsBias(Array(pytorchW(s"${name}_weight")))
-    }
-    fcNames.foreach{name =>
-      ncf.ncfModel(name).get.setWeightsBias(Array(
-        pytorchW(s"${name}_weight"), pytorchW(s"${name}_bias")))
-    }
+//    val pyBigDL = new PythonBigDL[Float]()
+//    val pytorchW = com.intel.analytics.bigdl.utils.File
+//      .load[util.HashMap[String, JTensor]]("pytorch_weight.obj")
+//      .asScala.map(v => (v._1, pyBigDL.toTensor(v._2)))
+//    val embeddingNames = Array("mfUserEmbedding", "mfItemEmbedding",
+//      "mlpUserEmbedding", "mlpItemEmbedding")
+//    val fcNames = Array("fc256->256", "fc256->128",
+//      "fc128->64", "fc128->1")
+//    embeddingNames.foreach{name =>
+//      ncf.ncfModel(name).get.setWeightsBias(Array(pytorchW(s"${name}_weight")))
+//    }
+//    fcNames.foreach{name =>
+//      ncf.ncfModel(name).get.setWeightsBias(Array(
+//        pytorchW(s"${name}_weight"), pytorchW(s"${name}_bias")))
+//    }
 
     println(ncf)
 
@@ -186,11 +187,24 @@ object NeuralCFexample {
 //    val valDataset = (DataSet.array[Sample[Float]](loadPytorchTest("test-ratings.csv",
 //      "test-negative.csv")) -> SampleToMiniBatch[Float](validateBatchSize)).toLocal()
 
-    val trainDataset = (DataSet.array[MiniBatch[Float]](
-      ConvertToBinary.loadTrainBinary(inputDir + "/0", param.batchSize))).toLocal()
-    val valDataset = (DataSet.array[Sample[Float]](
-      ConvertToBinary.loadTestBinary(inputDir + "/test"))
-      -> SampleToMiniBatch[Float](validateBatchSize)).toLocal()
+    val (ratings, usercount, itemcount, itemMapping) =
+      loadPublicData(sqlContext, param.inputDir, param.dataset)
+    ratings.cache()
+    val (evalPos, trainSet, valSample) = GenerateData.generateTrainValSet(ratings, userCount, itemCount,
+      trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
+    val trainDataset = new NCFDataSet(trainSet, evalPos,
+      param.trainNegtiveNum, param.batchSize, userCount, itemCount, processes = validateBatchSize)
+    var start = System.currentTimeMillis()
+    trainDataset.shuffle()
+    println(s"Generate epoch 1 data: ${System.currentTimeMillis() - start} ms")
+    val valDataset = (DataSet.array(valSample) ->
+      SampleToMiniBatch[Float](validateBatchSize)).toLocal()
+
+//    val trainDataset = (DataSet.array[MiniBatch[Float]](
+//      ConvertToBinary.loadTrainBinary(inputDir + "/0", param.batchSize))).toLocal()
+//    val valDataset = (DataSet.array[Sample[Float]](
+//      ConvertToBinary.loadTestBinary(inputDir + "/test"))
+//      -> SampleToMiniBatch[Float](validateBatchSize)).toLocal()
 
     val optimizer = new NCFOptimizer2[Float](ncf,
       trainDataset, BCECriterion[Float]())
@@ -208,16 +222,19 @@ object NeuralCFexample {
     while(e <= param.nEpochs) {
       println(s"Starting epoch $e/${param.nEpochs}")
       val endTrigger = Trigger.maxEpoch(e)
-      val newTrainDataset = (DataSet.array[MiniBatch[Float]](
-        ConvertToBinary.loadTrainBinary(inputDir + s"/${e - 1}", param.batchSize))).toLocal()
+//      val newTrainDataset = (DataSet.array[MiniBatch[Float]](
+//        ConvertToBinary.loadTrainBinary(inputDir + s"/${e - 1}", param.batchSize))).toLocal()
 //      val newTrainDataset = (DataSet.array[MiniBatch[Float]](
 //        loadPytorchTrain(s"${e - 1}.txt", param.batchSize))).toLocal()
 //      val newTrainDataset = (DataSet.array[Sample[Float]](
 //        trainRdds.collect()) -> SampleToMiniBatch(param.batchSize)).toLocal()
 //      newTrainDataset.shuffle()
+      start = System.currentTimeMillis()
+      trainDataset.shuffle()
+      println(s"Generate epoch ${e} data: ${System.currentTimeMillis() - start} ms")
 
       optimizer
-        .setTrainData(newTrainDataset)
+//        .setTrainData(newTrainDataset)
         .setEndWhen(endTrigger)
         .optimize()
 
