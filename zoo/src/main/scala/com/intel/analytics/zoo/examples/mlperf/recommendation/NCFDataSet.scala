@@ -1,4 +1,4 @@
-package com.intel.analytics.zoo.examples.recommendation
+package com.intel.analytics.zoo.examples.mlperf.recommendation
 
 import java.util
 import java.util.concurrent.{Executors, ThreadFactory}

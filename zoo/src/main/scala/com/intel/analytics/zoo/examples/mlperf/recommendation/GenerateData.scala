@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.intel.analytics.zoo.examples.recommendation
+package com.intel.analytics.zoo.examples.mlperf.recommendation
 
 import java.io.{DataOutputStream, FileOutputStream}
 import java.nio.ByteBuffer
