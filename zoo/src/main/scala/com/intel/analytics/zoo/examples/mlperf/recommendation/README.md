@@ -5,52 +5,22 @@ The model trains on binary information about whether or not a user interacted wi
 # 2. Directions
 ### Steps to configure machine
 
-#### From Source
-
-1. Install [PyTorch v0.4.0](https://github.com/pytorch/pytorch/tree/v0.4.0)
+1. Install [JDK 1.8](https://www.oracle.com/technetwork/java/javase/downloads/jdk8-downloads-2133151.html) and [Maven 3.3.9](https://archive.apache.org/dist/maven/maven-3/3.3.9/binaries/)
 2. Install `unzip` and `curl`
 
 ```bash
 sudo apt-get install unzip curl
 ```
-3. Checkout the MLPerf repo
+3. Checkout the repo
 ```bash
-git clone https://github.com/mlperf/reference.git
+git clone -b ncf-new https://github.com/qiuxin2012/analytics-zoo.git
 ```
 
-4. Install other python packages
+4. Build from source
 
 ```bash
-cd reference/recommendation/pytorch
-pip install -r requirements.txt
-```
-
-#### From Docker
-
-1. Checkout the MLPerf repo
-
-```bash
-git clone https://github.com/mlperf/reference.git
-```
-2. Install CUDA and Docker
-
-```bash
-source reference/install_cuda_docker.sh
-```
-
-3. Get the docker image for the recommendation task
-
-```bash
-# Pull from Docker Hub
-docker pull mlperf/recommendation:v0.5
-```
-
-or
-
-```bash
-# Build from Dockerfile
-cd reference/recommendation/pytorch
-sudo docker build -t mlperf/recommendation:v0.5 .
+cd analytics-zoo
+./make-dist.sh -P spark_2.x
 ```
 
 ### Steps to download and verify data
@@ -59,27 +29,18 @@ You can download and verify the dataset by running the `download_dataset.sh` and
 
 ```bash
 # Creates ml-20.zip
-source ../download_dataset.sh
+source download_dataset.sh
 # Confirms the MD5 checksum of ml-20.zip
-source ../verify_dataset.sh
+source verify_dataset.sh
 ```
 
 ### Steps to run and time
 
-#### From Source
 
 Run the `run_and_time.sh` script with an integer seed value between 1 and 5
 
 ```bash
 source run_and_time.sh SEED
-```
-
-#### Docker Image
-
-```bash
-sudo nvidia-docker run -i -t --rm --ipc=host \
-    --mount "type=bind,source=$(pwd),destination=/mlperf/experiment" \
-    mlperf/recommendation:v0.5 SEED
 ```
 
 # 3. Dataset/Environment
