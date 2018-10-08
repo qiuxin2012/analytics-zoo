@@ -20,18 +20,15 @@ import java.util
 
 import com.intel.analytics.bigdl._
 import com.intel.analytics.bigdl.dataset.{DataSet, MiniBatch, Sample, SampleToMiniBatch}
-import com.intel.analytics.bigdl.example.recommendation.NeuralCFV2
 import com.intel.analytics.bigdl.nn.abstractnn.Activity
 import com.intel.analytics.bigdl.nn.{BCECriterion, ClassNLLCriterion}
 import com.intel.analytics.bigdl.numeric.NumericFloat
 import com.intel.analytics.bigdl.optim._
-import com.intel.analytics.bigdl.python.api.{JTensor, PythonBigDL}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.utils.{Engine, File, RandomGenerator, T}
-import com.intel.analytics.bigdl.visualization.{TrainSummary, ValidationSummary}
 import com.intel.analytics.zoo.common.NNContext
-import com.intel.analytics.zoo.models.recommendation.{NeuralCF, UserItemFeature, Utils}
+import com.intel.analytics.zoo.models.recommendation.{NeuralCF, NeuralCFV2, UserItemFeature, Utils}
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
@@ -124,70 +121,11 @@ object NeuralCFexample {
         learningRateDecay = param.learningRateDecay))
     println(s"${param.learningRate}, ${param.learningRateDecay}")
     val validateBatchSize = optimMethod("linears").asInstanceOf[ParallelAdam[Float]].parallelNum
-    val inputDir = param.inputDir
 
-//    val (ratings, userCount, itemCount, itemMapping) =
-//      loadPublicData(sqlContext, param.inputDir, param.dataset)
-//    ratings.cache()
-//    println(s"${userCount} ${itemCount}")
-
-//    val (trainDataFrame, valDataFrame) = generateTrainValData(ratings, userCount, itemCount,
-//      trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
-//
-//    val isImplicit = false
-//    val trainpairFeatureRdds =
-//      assemblyFeature(isImplicit, trainDataFrame, userCount, itemCount)
-//    val validationpairFeatureRdds =
-//      assemblyValFeature(isImplicit, valDataFrame, userCount, itemCount, param.valNegtiveNum)
-//    val trainRdds = trainpairFeatureRdds.map(x => x.sample)
-//    val validationRdds = validationpairFeatureRdds.map(x => x.sample).cache()
-// println(s"Train set ${trainRdds.count()} records")
-//    println(s"Val set ${validationRdds.count()} records")
-//    val valDataset = DataSet.array(validationRdds.collect()) -> SampleToMiniBatch(validateBatchSize)
-
-//    val trainDataset = (DataSet.array[Sample[Float]](trainRdds.collect()) ->
-//      SampleToMiniBatch(param.batchSize)).toLocal()
-//    trainDataset.shuffle()
-    val userCount = 138493
-    val itemCount = 26744
     val hiddenLayers = param.layers.split(",").map(_.toInt)
     RandomGenerator.RNG.setSeed(1)
 
-    val ncf = NeuralCFV2[Float](
-      userCount = userCount,
-      itemCount = itemCount,
-      numClasses = 1,
-      userEmbed = hiddenLayers(0) / 2,
-      itemEmbed = hiddenLayers(0) / 2,
-      hiddenLayers = hiddenLayers.slice(1, hiddenLayers.length),
-      mfEmbed = param.numFactors)
-
-//    val pyBigDL = new PythonBigDL[Float]()
-//    val pytorchW = com.intel.analytics.bigdl.utils.File
-//      .load[util.HashMap[String, JTensor]]("pytorch_weight.obj")
-//      .asScala.map(v => (v._1, pyBigDL.toTensor(v._2)))
-//    val embeddingNames = Array("mfUserEmbedding", "mfItemEmbedding",
-//      "mlpUserEmbedding", "mlpItemEmbedding")
-//    val fcNames = Array("fc256->256", "fc256->128",
-//      "fc128->64", "fc128->1")
-//    embeddingNames.foreach{name =>
-//      ncf.ncfModel(name).get.setWeightsBias(Array(pytorchW(s"${name}_weight")))
-//    }
-//    fcNames.foreach{name =>
-//      ncf.ncfModel(name).get.setWeightsBias(Array(
-//        pytorchW(s"${name}_weight"), pytorchW(s"${name}_bias")))
-//    }
-
-    println(ncf)
-
-    println(s"parameter length: ${ncf.parameters()._1.map(_.nElement()).sum}")
-
-
-//    val trainDataset = (DataSet.array[MiniBatch[Float]](loadPytorchTrain("0.txt", param.batchSize))).toLocal()
-//    val valDataset = (DataSet.array[Sample[Float]](loadPytorchTest("test-ratings.csv",
-//      "test-negative.csv")) -> SampleToMiniBatch[Float](validateBatchSize)).toLocal()
-
-    val (ratings, usercount, itemcount, itemMapping) =
+    val (ratings, userCount, itemCount, itemMapping) =
       loadPublicData(sqlContext, param.inputDir, param.dataset)
     ratings.cache()
     val (evalPos, trainSet, valSample) = GenerateData.generateTrainValSet(ratings, userCount, itemCount,
@@ -200,11 +138,18 @@ object NeuralCFexample {
     val valDataset = (DataSet.array(valSample) ->
       SampleToMiniBatch[Float](validateBatchSize)).toLocal()
 
-//    val trainDataset = (DataSet.array[MiniBatch[Float]](
-//      ConvertToBinary.loadTrainBinary(inputDir + "/0", param.batchSize))).toLocal()
-//    val valDataset = (DataSet.array[Sample[Float]](
-//      ConvertToBinary.loadTestBinary(inputDir + "/test"))
-//      -> SampleToMiniBatch[Float](validateBatchSize)).toLocal()
+    val ncf = NeuralCFV2[Float](
+      userCount = userCount,
+      itemCount = itemCount,
+      numClasses = 1,
+      userEmbed = hiddenLayers(0) / 2,
+      itemEmbed = hiddenLayers(0) / 2,
+      hiddenLayers = hiddenLayers.slice(1, hiddenLayers.length),
+      mfEmbed = param.numFactors)
+
+    println(ncf)
+
+    println(s"parameter length: ${ncf.parameters()._1.map(_.nElement()).sum}")
 
     val optimizer = new NCFOptimizer2[Float](ncf,
       trainDataset, BCECriterion[Float]())
@@ -222,19 +167,11 @@ object NeuralCFexample {
     while(e <= param.nEpochs) {
       println(s"Starting epoch $e/${param.nEpochs}")
       val endTrigger = Trigger.maxEpoch(e)
-//      val newTrainDataset = (DataSet.array[MiniBatch[Float]](
-//        ConvertToBinary.loadTrainBinary(inputDir + s"/${e - 1}", param.batchSize))).toLocal()
-//      val newTrainDataset = (DataSet.array[MiniBatch[Float]](
-//        loadPytorchTrain(s"${e - 1}.txt", param.batchSize))).toLocal()
-//      val newTrainDataset = (DataSet.array[Sample[Float]](
-//        trainRdds.collect()) -> SampleToMiniBatch(param.batchSize)).toLocal()
-//      newTrainDataset.shuffle()
       start = System.currentTimeMillis()
       trainDataset.shuffle()
       println(s"Generate epoch ${e} data: ${System.currentTimeMillis() - start} ms")
 
       optimizer
-//        .setTrainData(newTrainDataset)
         .setEndWhen(endTrigger)
         .optimize()
 

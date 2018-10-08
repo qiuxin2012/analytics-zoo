@@ -18,7 +18,7 @@ package com.intel.analytics.bigdl.optim
 
 import com.intel.analytics.bigdl.dataset.{LocalDataSet, MiniBatch}
 import com.intel.analytics.bigdl._
-import com.intel.analytics.bigdl.example.recommendation.NeuralCFV2
+import com.intel.analytics.bigdl.examples.recommendation.ClearUtil
 import com.intel.analytics.bigdl.mkl.MklDnn
 import com.intel.analytics.bigdl.mkl.hardware.Affinity
 import com.intel.analytics.bigdl.nn.{Graph, Utils}
@@ -26,6 +26,7 @@ import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, Activity}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.utils._
+import com.intel.analytics.zoo.models.recommendation.NeuralCFV2
 import org.apache.log4j.Logger
 
 import scala.reflect.ClassTag
@@ -348,21 +349,21 @@ object NCFOptimizer2 {
                              shareGradient: Boolean)(
       implicit ev: TensorNumeric[T]): Array[Module[T]] = {
     model.getParameters()
-    val (wb, grad) = Util.getAndClearWeightBiasGrad(model.parameters())
+    val (wb, grad) = ClearUtil.getAndClearWeightBiasGrad(model.parameters())
 
     val models = (1 to copies).map(i => {
       logger.info(s"Clone $i model...")
       val m: Module[T] = model.cloneModule()
       Util.putWeightBias(wb, m)
       if (shareGradient) {
-        Util.putGradWeightBias(grad, m)
+        ClearUtil.putGradWeightBias(grad, m)
       } else {
         Util.initGradWeightBias(grad, m)
       }
       m
     }).toArray
     Util.putWeightBias(wb, model)
-    Util.putGradWeightBias(grad, model)
+    ClearUtil.putGradWeightBias(grad, model)
     models
   }
 }

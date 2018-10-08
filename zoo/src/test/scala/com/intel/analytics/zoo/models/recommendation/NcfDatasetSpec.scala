@@ -1,6 +1,5 @@
 package com.intel.analytics.zoo.models.recommendation
 
-import com.intel.analytics.bigdl.example.recommendation.NeuralCFV2
 import com.intel.analytics.bigdl.nn.BCECriterion
 import com.intel.analytics.bigdl.optim.{EmbeddingAdam2, NCFOptimizer2, ParallelAdam, Trigger}
 import com.intel.analytics.bigdl.tensor.Tensor
