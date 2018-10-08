@@ -54,11 +54,13 @@ object ClearUtil {
       Array()
     }
   }
+
   private[bigdl] def getAndClearWeightBiasGrad[T: ClassTag]
   (parameters: (Array[Tensor[T]], Array[Tensor[T]]))(implicit ev: TensorNumeric[T])
   : (Array[Tensor[T]], Array[Tensor[T]]) = {
     (getAndClear(parameters._1), getAndClear(parameters._2))
   }
+
   private[bigdl] def putGradWeightBias[T: ClassTag](
                                                        broadcastGradWeightBias: Array[Tensor[T]],
                                                        localModel: Module[T])(implicit ev: TensorNumeric[T]): Unit = {
