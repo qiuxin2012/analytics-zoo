@@ -5,7 +5,7 @@ The model trains on binary information about whether or not a user interacted wi
 # 2. Directions
 ### Steps to configure machine
 
-1. Install [JDK 1.8](https://www.oracle.com/technetwork/java/javase/downloads/jdk8-downloads-2133151.html) and [Maven 3.3.9](https://archive.apache.org/dist/maven/maven-3/3.3.9/binaries/)
+1. Install [JDK 1.8](https://www.oracle.com/technetwork/java/javase/downloads/jdk8-downloads-2133151.html), [Maven 3.3.9](https://archive.apache.org/dist/maven/maven-3/3.3.9/binaries/), and [Spark 2.1.0](https://archive.apache.org/dist/spark/spark-2.1.0/spark-2.1.0-bin-hadoop2.7.tgz). Make sure `mvn`, `java`, `spark-submit` works in shell.
 2. Install `unzip` and `curl`
 
 ```bash
@@ -30,18 +30,20 @@ You can download and verify the dataset by running the `download_dataset.sh` and
 
 ```bash
 # Creates ml-20.zip
-source download_dataset.sh
+bash download_dataset.sh
 # Confirms the MD5 checksum of ml-20.zip
-source verify_dataset.sh
+bash verify_dataset.sh
 ```
 
 ### Steps to run and time
 
 
-Run the `run_and_time.sh` script with an integer seed value between 1 and 5
+Run the `run_and_time.sh` script with an integer core and seed.
+CORE is the parallel number of BigDL, the best practice is physical core number of the machine.
+SEED is an interger value.
 
 ```bash
-source run_and_time.sh SEED
+bash run_and_time.sh CORE SEED
 ```
 
 # 3. Dataset/Environment
