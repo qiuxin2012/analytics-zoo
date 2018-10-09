@@ -51,7 +51,8 @@ case class NeuralCFParams(val inputDir: String = "./data/ml-1m",
                           val trainNegtiveNum: Int = 4,
                           val valNegtiveNum: Int = 100,
                           val layers: String = "64,32,16,8",
-                          val numFactors: Int = 8
+                          val numFactors: Int = 8,
+                          val seed: Int = 1
                     )
 
 case class Rating(userId: Int, itemId: Int, label: Int, timestamp: Int, train: Boolean)
@@ -91,6 +92,9 @@ object NeuralCFexample {
       opt[String]("layers")
         .text("The sizes of hidden layers for MLP. Default is 64,32,16,8")
         .action((x, c) => c.copy(layers = x))
+      opt[Int]("seed")
+        .text("Random seed to generate data and model")
+        .action((x, c) => c.copy(seed = x))
       opt[Int]("numFactors")
         .text("The Embedding size of MF model.")
         .action((x, c) => c.copy(numFactors = x))
@@ -123,7 +127,7 @@ object NeuralCFexample {
     val validateBatchSize = optimMethod("linears").asInstanceOf[ParallelAdam[Float]].parallelNum
 
     val hiddenLayers = param.layers.split(",").map(_.toInt)
-    RandomGenerator.RNG.setSeed(1)
+    RandomGenerator.RNG.setSeed(param.seed)
 
     val (ratings, userCount, itemCount, itemMapping) =
       loadPublicData(sqlContext, param.inputDir, param.dataset)
@@ -131,7 +135,8 @@ object NeuralCFexample {
     val (evalPos, trainSet, valSample) = GenerateData.generateTrainValSet(ratings, userCount, itemCount,
       trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
     val trainDataset = new NCFDataSet(trainSet, evalPos,
-      param.trainNegtiveNum, param.batchSize, userCount, itemCount, processes = validateBatchSize)
+      param.trainNegtiveNum, param.batchSize, userCount, itemCount,
+      seed = param.seed, processes = validateBatchSize)
     var start = System.currentTimeMillis()
     trainDataset.shuffle()
     println(s"Generate epoch 1 data: ${System.currentTimeMillis() - start} ms")

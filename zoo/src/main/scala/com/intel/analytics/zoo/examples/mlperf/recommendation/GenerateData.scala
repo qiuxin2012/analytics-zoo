@@ -108,29 +108,22 @@ object GenerateData {
     Array[Sample[Float]]) = {
 //    val maxTimeStep = rating.groupBy("userId").max("timestamp").collect().map(r => (r.getInt(0), r.getInt(1))).toMap
 //    val bcT = rating.sparkSession.sparkContext.broadcast(maxTimeStep)
-    case class UserItem(userId: Int, ItemId: Int, timestamp: Int)
-    trait UserItemOrdering extends Ordering[UserItem] {
-      def compare(x: UserItem, y: UserItem): Int = x.timestamp - y.timestamp
+    case class ItemTimestamp(ItemId: Int, timestamp: Int)
+    trait UserItemOrdering extends Ordering[ItemTimestamp] {
+      def compare(x: ItemTimestamp, y: ItemTimestamp): Int = x.timestamp - y.timestamp
     }
-    implicit object UserItem extends UserItemOrdering
+    implicit object ItemTimestamp extends UserItemOrdering
 
     val evalPos = rating.rdd.groupBy(_.getInt(0))
-      .map(v => (v._1, v._2.toArray.map(row => UserItem(row.getInt(0), row.getInt(1), row.getInt(3)))))
+      .map(v => (v._1, v._2.toArray.map(row => ItemTimestamp(row.getInt(1), row.getInt(3)))))
+      .filter(_._2.size >= 20)
       .map(v => {
         Sorting.quickSort(v._2)
         (v._1, v._2.last.ItemId)
       }).collect().toMap
-//    // TODO: testing
-//    val evalPos2 = rating.filter(r => bcT.value.apply(r.getInt(0)) == r.getInt(3)).rdd.groupBy(_.getInt(0))
-//      .collect().sortBy(_._1)
-//    val evalPos3 = rating.filter(r => bcT.value.apply(r.getInt(0)) == r.getInt(3)).rdd.groupBy(_.getInt(0))
-//      .map(pos => (pos._1, pos._2.last.getInt(1)))
-//      .collect().sortBy(_._1)
 
-//    val positives = Source.fromFile("test-ratings.csv").getLines()
-//    val evalPos = positives.toArray.map(_.split("\t")).map(v => (v(0).toInt + 1, v(1).toInt + 1)).toMap
-
-    val groupedRdd = rating.rdd.groupBy(_.getAs[Int]("userId")).cache()
+    val groupedRdd = rating.rdd.groupBy(_.getAs[Int]("userId"))
+      .cache()
     val negRdd = groupedRdd.map{v =>
       val userId = v._1
       val items = scala.collection.mutable.Set(v._2.map(_.getAs[Int]("itemId")).toArray: _*)
@@ -215,40 +208,5 @@ object GenerateData {
     }
     println(s"save $count record to ${des}: ${System.currentTimeMillis() - startTime}ms")
   }
-
-//  def saveTestTobinary(evalSample: String,
-//                                 des: String, numNegs: Int = 999): Unit = {
-//    val startTime = System.currentTimeMillis()
-//    val positives = Source.fromFile(posFile).getLines()
-//    val negatives = Source.fromFile(negFile).getLines()
-//    val testByteBuffer = ByteBuffer.allocate((numNegs + 2) * 4)
-//    val testBuffer = testByteBuffer.asFloatBuffer()
-//    (1 to numNegs + 1).foreach{i =>
-//      testBuffer.put(i, 1)
-//    }
-//
-//    new java.io.File(des).mkdirs()
-//    while(positives.hasNext && negatives.hasNext) {
-//      val pos = positives.next().split("\t")
-//      val userId = pos(0).toFloat
-//      val testFile = new DataOutputStream(new FileOutputStream(des + s"/${userId.toInt + 1}.obj"))
-//      val posItem = pos(1).toFloat
-//      val neg = negatives.next().split("\t").map(_.toFloat)
-//      val distinctNegs = neg.distinct
-//      testBuffer.put(0, distinctNegs.length + 1)
-//
-//      var i = 1
-//      while (i <= distinctNegs.length) {
-//        testBuffer.put(i, distinctNegs(i - 1) + 1)
-//        i += 1
-//      }
-//      testBuffer.put(i, posItem + 1)
-//
-//      testFile.write(testByteBuffer.array())
-//      testFile.close()
-//
-//    }
-//    println(s"convert test path: ${System.currentTimeMillis() - startTime}ms")
-//  }
 
 }

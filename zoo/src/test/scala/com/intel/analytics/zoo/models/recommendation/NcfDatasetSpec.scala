@@ -4,7 +4,7 @@ import com.intel.analytics.bigdl.nn.BCECriterion
 import com.intel.analytics.bigdl.optim.{EmbeddingAdam2, NCFOptimizer2, ParallelAdam, Trigger}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.utils.{Engine, RandomGenerator}
-import com.intel.analytics.zoo.examples.recommendation.NCFDataSet
+import com.intel.analytics.zoo.examples.mlperf.recommendation.NCFDataSet
 import com.intel.analytics.zoo.pipeline.api.keras.ZooSpecHelper
 
 class NcfDatasetSpec extends ZooSpecHelper{

@@ -24,7 +24,7 @@ import com.intel.analytics.bigdl.optim.{Adam, Optimizer, Trigger}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.utils.T
 import com.intel.analytics.zoo.common.NNContext
-import com.intel.analytics.zoo.examples.recommendation.{HitRate, Ndcg}
+import com.intel.analytics.zoo.examples.mlperf.recommendation.{HitRate, Ndcg}
 import com.intel.analytics.zoo.pipeline.api.keras.ZooSpecHelper
 import com.intel.analytics.zoo.pipeline.api.keras.serializer.ModuleSerializationTest
 import org.apache.log4j.{Level, Logger}
