@@ -19,11 +19,11 @@ if unzip -o ml-20m.zip
 then
     echo "Start training"
     t0=$(date +%s)
-	java -Xmx40g  -Dspark.master="local[56]" -Dbigdl.utils.Engine.defaultPoolSize=56 \
-	 --class com.intel.analytics.zoo.examples.mlperf.recommendation.NeuralCFexample \
-	 zoo/target/lib/analytics-zoo-bigdl_0.7.0-SNAPSHOT-spark_2.1.0-0.3.0-SNAPSHOT-jar-with-dependencies-and-spark.jar \
-	 --inputDir ml-20m -b 2048 -e 7 --valNeg 999 --layers 256,256,128,64 --numFactors 64 \
-	 --dataset ml-20m -l 0.0005 --seed $seed
+    spark-submit --master "local[56]" --driver-memory 16g \
+    --conf "spark.driver.extraJavaOptions=-Dbigdl.utils.Engine.defaultPoolSize=56" \
+    --class com.intel.analytics.zoo.examples.mlperf.recommendation.NeuralCFexample \
+    dist/lib/analytics-zoo-bigdl_0.7.0-SNAPSHOT-spark_2.1.0-0.3.0-SNAPSHOT-jar-with-dependencies.jar \
+    --inputDir ml-20m -b 2048 -e 15 --valNeg 999 --layers 256,256,128,64 --numFactors 64 --dataset ml-20m -l 0.0005
     t1=$(date +%s)
 	delta=$(( $t1 - $t0 ))
     echo "Finish training in $delta seconds"
@@ -44,8 +44,4 @@ else
 	echo "Problem unzipping ml-20.zip"
 	echo "Please run 'download_data.sh && verify_datset.sh' first"
 fi
-
-
-
-
 

@@ -100,7 +100,7 @@ object NeuralCFexample {
         .action((x, c) => c.copy(numFactors = x))
     }
 
-    parser.parse(args, defaultParams).map {
+   parser.parse(args, defaultParams).map {
       params =>
         run(params)
     } getOrElse {
