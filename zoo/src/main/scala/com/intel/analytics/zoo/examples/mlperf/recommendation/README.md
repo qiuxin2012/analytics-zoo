@@ -22,6 +22,7 @@ git clone -b ncf-new https://github.com/qiuxin2012/analytics-zoo.git
 cd analytics-zoo
 ./make-dist.sh -P spark_2.x
 ```
+Maven may take a few minutes to download dependencies the first time.
 
 ### Steps to download and verify data
 
