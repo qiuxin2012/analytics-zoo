@@ -27,7 +27,7 @@ then
       --class com.intel.analytics.zoo.examples.mlperf.recommendation.NeuralCFexample \
       dist/lib/analytics-zoo-bigdl_0.7.0-SNAPSHOT-spark_2.1.0-0.3.0-SNAPSHOT-jar-with-dependencies.jar \
       --inputDir ml-20m -b 2048 -e 7 --valNeg 999 --layers 256,256,128,64 --numFactors 64 \
-      --dataset ml-20m -l 0.0005 --seed $seed
+      --dataset ml-20m -l 0.0005 --seed $seed --threshold $THRESHOLD
     t1=$(date +%s)
 	delta=$(( $t1 - $t0 ))
     echo "Finish training in $delta seconds"

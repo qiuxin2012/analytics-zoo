@@ -26,7 +26,7 @@ import com.intel.analytics.bigdl.numeric.NumericFloat
 import com.intel.analytics.bigdl.optim._
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.utils.{Engine, File, RandomGenerator, T}
+import com.intel.analytics.bigdl.utils._
 import com.intel.analytics.zoo.common.NNContext
 import com.intel.analytics.zoo.models.recommendation.{NeuralCF, NeuralCFV2, UserItemFeature, Utils}
 import org.apache.log4j.{Level, Logger}
@@ -52,7 +52,8 @@ case class NeuralCFParams(val inputDir: String = "./data/ml-1m",
                           val valNegtiveNum: Int = 100,
                           val layers: String = "64,32,16,8",
                           val numFactors: Int = 8,
-                          val seed: Int = 1
+                          val seed: Int = 1,
+                          val threshold: Float = 0.635f
                     )
 
 case class Rating(userId: Int, itemId: Int, label: Int, timestamp: Int, train: Boolean)
@@ -95,6 +96,9 @@ object NeuralCFexample {
       opt[Int]("seed")
         .text("Random seed to generate data and model")
         .action((x, c) => c.copy(seed = x))
+      opt[Double]("threshold")
+        .text("End training when hit this threshold")
+        .action((x, c) => c.copy(threshold = x.toFloat))
       opt[Int]("numFactors")
         .text("The Embedding size of MF model.")
         .action((x, c) => c.copy(numFactors = x))
@@ -164,14 +168,14 @@ object NeuralCFexample {
         .setValidation(Trigger.everyEpoch, valDataset,
           Array(new HitRate[Float](negNum = param.valNegtiveNum),
           new Ndcg[Float](negNum = param.valNegtiveNum)))
-    val endTrigger = Trigger.maxEpoch(1)
+    val endTrigger = maxEpochAndScore(1, param.threshold)
     optimizer
       .setEndWhen(endTrigger)
       .optimize()
     var e = 2
     while(e <= param.nEpochs) {
       println(s"Starting epoch $e/${param.nEpochs}")
-      val endTrigger = Trigger.maxEpoch(e)
+      val endTrigger = maxEpochAndScore(e, param.threshold)
       start = System.currentTimeMillis()
       trainDataset.shuffle()
       println(s"Generate epoch ${e} data: ${System.currentTimeMillis() - start} ms")
@@ -402,6 +406,15 @@ object NeuralCFexample {
       UserItemFeature(uid, -1, Sample(feature, label))
     })
     rddOfSample
+  }
+
+  def maxEpochAndScore(maxEpoch: Int, maxScore: Float): Trigger = {
+    new Trigger() {
+      override def apply(state: Table): Boolean = {
+        state[Float]("score") > maxScore ||
+          state[Int]("epoch") > maxEpoch
+      }
+    }
   }
 
 }
