@@ -422,89 +422,89 @@ object NeuralCFexample {
 
 }
 
-//class HitRate[T: ClassTag](k: Int = 10, negNum: Int = 100)(
-//    implicit ev: TensorNumeric[T])
-//  extends ValidationMethod[T] {
-//  override def apply(output: Activity, target: Activity):
-//  ValidationResult = {
-//    val o = output.toTensor[T].resize(1 + negNum)
-//    val t = target.toTensor[T].resize(1 + negNum)
-//    var exceptedTarget = 0
-//    var i = 1
-//    while(i <= t.nElement()) {
-//      if (t.valueAt(i) == 1) {
-//        exceptedTarget = i
-//      }
-//      i += 1
-//    }
-//    require(exceptedTarget != 0, s"No positive sample")
-//
-//    val hr = hitRate(exceptedTarget,
-//      o.narrow(1, 1, exceptedTarget), k)
-//
-//    new LossResult(hr, 1)
-//  }
-//
-//  def hitRate(index: Int, o: Tensor[T], k: Int): Float = {
-//    var topK = 1
-//    var i = 1
-//    val precision = ev.toType[Float](o.valueAt(index))
-//    while (i < o.nElement() && topK <= k) {
-//      if (ev.toType[Float](o.valueAt(i)) > precision) {
-//        topK += 1
-//      }
-//      i += 1
-//    }
-//
-//    if(topK <= k) {
-//      1
-//    } else {
-//      0
-//    }
-//  }
-//
-//  override def format(): String = "HitRate@10"
-//}
-//
-//class Ndcg[T: ClassTag](k: Int = 10, negNum: Int = 100)(
-//    implicit ev: TensorNumeric[T])
-//  extends ValidationMethod[T] {
-//  override def apply(output: Activity, target: Activity):
-//  ValidationResult = {
-//    val o = output.toTensor[T].resize(1 + negNum)
-//    val t = target.toTensor[T].resize(1 + negNum)
-//    var exceptedTarget = 0
-//    var i = 1
-//    while(i <= t.nElement()) {
-//      if (t.valueAt(i) == 1) {
-//        exceptedTarget = i
-//      }
-//      i += 1
-//    }
-//    require(exceptedTarget != 0, s"No positive sample")
-//
-//    val n = ndcg(exceptedTarget, o.narrow(1, 1, exceptedTarget), k)
-//
-//    new LossResult(n, 1)
-//  }
-//
-//  def ndcg(index: Int, o: Tensor[T], k: Int): Float = {
-//    var ranking = 1
-//    var i = 1
-//    val precision = ev.toType[Float](o.valueAt(index))
-//    while (i < o.nElement() && ranking <= k) {
-//      if (ev.toType[Float](o.valueAt(i)) > precision) {
-//        ranking += 1
-//      }
-//      i += 1
-//    }
-//
-//    if(ranking <= k) {
-//      (math.log(2) / math.log(ranking + 1)).toFloat
-//    } else {
-//      0
-//    }
-//  }
-//
-//  override def format(): String = "NDCG"
-//}
+class HitRate[T: ClassTag](k: Int = 10, negNum: Int = 100)(
+    implicit ev: TensorNumeric[T])
+  extends ValidationMethod[T] {
+  override def apply(output: Activity, target: Activity):
+  ValidationResult = {
+    val o = output.toTensor[T].resize(1 + negNum)
+    val t = target.toTensor[T].resize(1 + negNum)
+    var exceptedTarget = 0
+    var i = 1
+    while(i <= t.nElement()) {
+      if (t.valueAt(i) == 1) {
+        exceptedTarget = i
+      }
+      i += 1
+    }
+    require(exceptedTarget != 0, s"No positive sample")
+
+    val hr = hitRate(exceptedTarget,
+      o.narrow(1, 1, exceptedTarget), k)
+
+    new ContiguousResult(hr, 1, s"HitRatio@$k")
+  }
+
+  def hitRate(index: Int, o: Tensor[T], k: Int): Float = {
+    var topK = 1
+    var i = 1
+    val precision = ev.toType[Float](o.valueAt(index))
+    while (i < o.nElement() && topK <= k) {
+      if (ev.toType[Float](o.valueAt(i)) > precision) {
+        topK += 1
+      }
+      i += 1
+    }
+
+    if(topK <= k) {
+      1
+    } else {
+      0
+    }
+  }
+
+  override def format(): String = s"HitRatio@$k"
+}
+
+class Ndcg[T: ClassTag](k: Int = 10, negNum: Int = 100)(
+    implicit ev: TensorNumeric[T])
+  extends ValidationMethod[T] {
+  override def apply(output: Activity, target: Activity):
+  ValidationResult = {
+    val o = output.toTensor[T].resize(1 + negNum)
+    val t = target.toTensor[T].resize(1 + negNum)
+    var exceptedTarget = 0
+    var i = 1
+    while(i <= t.nElement()) {
+      if (t.valueAt(i) == 1) {
+        exceptedTarget = i
+      }
+      i += 1
+    }
+    require(exceptedTarget != 0, s"No positive sample")
+
+    val n = ndcg(exceptedTarget, o.narrow(1, 1, exceptedTarget), k)
+
+    new ContiguousResult(n, 1, s"NDCG")
+  }
+
+  def ndcg(index: Int, o: Tensor[T], k: Int): Float = {
+    var ranking = 1
+    var i = 1
+    val precision = ev.toType[Float](o.valueAt(index))
+    while (i < o.nElement() && ranking <= k) {
+      if (ev.toType[Float](o.valueAt(i)) > precision) {
+        ranking += 1
+      }
+      i += 1
+    }
+
+    if(ranking <= k) {
+      (math.log(2) / math.log(ranking + 1)).toFloat
+    } else {
+      0
+    }
+  }
+
+  override def format(): String = "NDCG"
+}
