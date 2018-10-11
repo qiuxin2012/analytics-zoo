@@ -20,11 +20,10 @@ import java.net.URL
 
 import com.intel.analytics.bigdl.dataset.Sample
 import com.intel.analytics.bigdl.nn.ClassNLLCriterion
-import com.intel.analytics.bigdl.optim.{Adam, Optimizer, Trigger}
+import com.intel.analytics.bigdl.optim._
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.utils.T
 import com.intel.analytics.zoo.common.NNContext
-import com.intel.analytics.zoo.examples.mlperf.recommendation.{HitRate, Ndcg}
 import com.intel.analytics.zoo.pipeline.api.keras.ZooSpecHelper
 import com.intel.analytics.zoo.pipeline.api.keras.serializer.ModuleSerializationTest
 import org.apache.log4j.{Level, Logger}
@@ -170,7 +169,7 @@ class NeuralCFSpec extends ZooSpecHelper {
     val o = Tensor[Float].range(1, 1000, 1).apply1(_ / 1000)
     val t = Tensor[Float](1000).zero
     t.setValue(1000, 1)
-    val hr = new HitRate[Float]()
+    val hr = new HitRatio[Float]()
     val r1 = hr.apply(o, t).result()
     r1._1 should be (1.0)
 
@@ -187,7 +186,7 @@ class NeuralCFSpec extends ZooSpecHelper {
     val o = Tensor[Float].range(1, 1000, 1).apply1(_ / 1000)
     val t = Tensor[Float](1000).zero
     t.setValue(1000, 1)
-    val ndcg = new Ndcg[Float]()
+    val ndcg = new NDCG[Float]()
     val r1 = ndcg.apply(o, t).result()
     r1._1 should be (1.0)
 

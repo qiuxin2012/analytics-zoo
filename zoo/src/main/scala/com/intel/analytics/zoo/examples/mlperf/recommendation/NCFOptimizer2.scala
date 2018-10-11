@@ -335,10 +335,11 @@ class NCFOptimizer2[T: ClassTag](
       }
     }).zip(vMethods).foreach(r => {
       logger.info(s"$header ${r._2} is ${r._1}")
+      state(r._2) = r._1
     })
-    logger.info(s"$header Throughput is ${
+    logger.info(s"$header Validate throughput is ${
       count / ((System.nanoTime() - start) / 1e9)
-    } record / sec")
+    } users / sec")
   }
 }
 
