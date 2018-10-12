@@ -22,7 +22,7 @@ if unzip -o ml-20m.zip
 then
     echo "Start training"
     t0=$(date +%s)
-    spark-submit --master "local[$core]" --driver-memory 40g \
+    spark-submit --master "local[$parallelism]" --driver-memory 40g \
       --conf "spark.driver.extraJavaOptions=-Dbigdl.utils.Engine.defaultPoolSize=$core" \
       --class com.intel.analytics.zoo.examples.mlperf.recommendation.NeuralCFexample \
       dist/lib/analytics-zoo-bigdl_0.7.0-SNAPSHOT-spark_2.1.0-0.3.0-SNAPSHOT-jar-with-dependencies.jar \
