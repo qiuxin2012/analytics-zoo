@@ -337,9 +337,9 @@ class NCFOptimizer2[T: ClassTag](
       logger.info(s"$header ${r._2} is ${r._1}")
       state(r._2) = r._1
     })
-    logger.info(s"$header Validate throughput is ${
-      count / ((System.nanoTime() - start) / 1e9)
-    } users / sec")
+    val timeCost = (System.nanoTime() - start) / 1e9
+    logger.info(s"$header Validation time cost: ${timeCost}s. Throughput is ${
+      count / (timeCost / 1e9) } users / sec")
   }
 }
 
