@@ -3,8 +3,8 @@ package com.intel.analytics.zoo.models.recommendation
 import com.intel.analytics.bigdl.nn.BCECriterion
 import com.intel.analytics.bigdl.optim.{EmbeddingAdam2, NCFOptimizer2, ParallelAdam, Trigger}
 import com.intel.analytics.bigdl.tensor.Tensor
-import com.intel.analytics.bigdl.utils.{Engine, RandomGenerator}
-import com.intel.analytics.zoo.examples.mlperf.recommendation.NCFDataSet
+import com.intel.analytics.bigdl.utils.{Engine, RandomGenerator, T}
+import com.intel.analytics.zoo.examples.mlperf.recommendation.{NCFDataSet, NeuralCFexample}
 import com.intel.analytics.zoo.pipeline.api.keras.ZooSpecHelper
 
 class NcfDatasetSpec extends ZooSpecHelper{
@@ -311,5 +311,21 @@ class NcfDatasetSpec extends ZooSpecHelper{
       .setEndWhen(Trigger.maxEpoch(3))
       .optimize()
 
+  }
+
+
+  "trigger" should "works fine" in {
+    val trigger = NeuralCFexample.maxEpochAndHr(5, 0.45f)
+    val state = T()
+    state("epoch") = 1
+    state("HitRatio@10") = 0.1f
+
+    while(!trigger(state)) {
+      println(state("epoch"))
+      println(state("HitRatio@10"))
+      state("epoch") = state[Int]("epoch") + 1
+      state("HitRatio@10") = state[Float]("HitRatio@10") + 0.1f
+
+    }
   }
 }

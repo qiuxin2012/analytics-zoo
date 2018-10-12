@@ -113,6 +113,7 @@ object NeuralCFexample {
   }
 
   def run(param: NeuralCFParams): Unit = {
+    println(s"Target HR is ${param.threshold}, seed is ${param.seed}")
     Logger.getLogger("org").setLevel(Level.ERROR)
     val conf = new SparkConf()
     conf.setAppName("NCFExample").set("spark.sql.crossJoin.enabled", "true")
@@ -141,9 +142,9 @@ object NeuralCFexample {
     val trainDataset = new NCFDataSet(trainSet, evalPos,
       param.trainNegtiveNum, param.batchSize, userCount, itemCount,
       seed = param.seed, processes = validateBatchSize)
-    var start = System.currentTimeMillis()
-    trainDataset.shuffle()
-    println(s"Generate epoch 1 data: ${System.currentTimeMillis() - start} ms")
+//    var start = System.currentTimeMillis()
+//    trainDataset.shuffle()
+//    println(s"Generate epoch 1 data: ${System.currentTimeMillis() - start} ms")
     val valDataset = (DataSet.array(valSample) ->
       SampleToMiniBatch[Float](validateBatchSize)).toLocal()
 
@@ -166,26 +167,26 @@ object NeuralCFexample {
     optimizer
       .setOptimMethods(optimMethod)
         .setValidation(Trigger.everyEpoch, valDataset,
-          Array(new HitRatio[Float](negNum = param.valNegtiveNum),
-          new NDCG[Float](negNum = param.valNegtiveNum)))
-    val endTrigger = maxEpochAndHr(1, param.threshold)
+          Array(new HitRate[Float](negNum = param.valNegtiveNum),
+          new Ndcg[Float](negNum = param.valNegtiveNum)))
+    val endTrigger = maxEpochAndHr(param.nEpochs, param.threshold)
     optimizer
       .setEndWhen(endTrigger)
       .optimize()
-    var e = 2
-    while(e <= param.nEpochs) {
-      println(s"Starting epoch $e/${param.nEpochs}")
-      val endTrigger = maxEpochAndHr(e, param.threshold)
-      start = System.currentTimeMillis()
-      trainDataset.shuffle()
-      println(s"Generate epoch ${e} data: ${System.currentTimeMillis() - start} ms")
-
-      optimizer
-        .setEndWhen(endTrigger)
-        .optimize()
-
-      e += 1
-    }
+//    var e = 2
+//    while(e <= param.nEpochs) {
+//      println(s"Starting epoch $e/${param.nEpochs}")
+//      val endTrigger = maxEpochAndHr(e, param.threshold)
+//      start = System.currentTimeMillis()
+//      trainDataset.shuffle()
+//      println(s"Generate epoch ${e} data: ${System.currentTimeMillis() - start} ms")
+//
+//      optimizer
+//        .setEndWhen(endTrigger)
+//        .optimize()
+//
+//      e += 1
+//    }
   }
 
   def loadPytorchTest(posFile: String, negFile: String): Array[Sample[Float]] = {

@@ -1,7 +1,7 @@
 #!/bin/bash
 # runs benchmark and reports time to convergence
 # to use the script:
-#   run_and_time.sh <core number> <random seed>
+#   run_and_time.sh <parallelism> <random seed>
 
 THRESHOLD=0.635
 BASEDIR=$(dirname -- "$0")
@@ -23,7 +23,7 @@ then
     echo "Start training"
     t0=$(date +%s)
     spark-submit --master "local[$parallelism]" --driver-memory 40g \
-      --conf "spark.driver.extraJavaOptions=-Dbigdl.utils.Engine.defaultPoolSize=$core" \
+      --conf "spark.driver.extraJavaOptions=-Dbigdl.utils.Engine.defaultPoolSize=$parallelism" \
       --class com.intel.analytics.zoo.examples.mlperf.recommendation.NeuralCFexample \
       dist/lib/analytics-zoo-bigdl_0.7.0-SNAPSHOT-spark_2.1.0-0.3.0-SNAPSHOT-jar-with-dependencies.jar \
       --inputDir ml-20m -b 2048 -e 7 --valNeg 999 --layers 256,256,128,64 --numFactors 64 \

@@ -103,6 +103,7 @@ class NCFOptimizer2[T: ClassTag](
   override def optimize(): Module[T] = {
     MklDnn.isLoaded
     var wallClockTime = 0L
+    var trueWallClockTime = 0L
     var count = 0
 //    optimMethods.values.foreach { optimMethod =>
 //      optimMethod.clearHistory()
@@ -112,7 +113,9 @@ class NCFOptimizer2[T: ClassTag](
     state("isLayerwiseScaled") = Utils.isLayerwiseScaled(_model)
     val optimMethod: OptimMethod[T] = optimMethods("linears")
     val embeddingOptim: EmbeddingAdam2[T] = optimMethods("embeddings").asInstanceOf[EmbeddingAdam2[T]]
-//    dataset.shuffle()
+    val generationStart = System.currentTimeMillis()
+    dataset.shuffle()
+    logger.info(s"Generate epoch ${state("epoch")} data: ${System.currentTimeMillis() - generationStart} ms")
     val numSamples = dataset.toLocal().data(train = false).map(_.size()).reduce(_ + _)
     var iter = dataset.toLocal().data(train = true)
     logger.info("model thread pool size is " + Engine.model.getPoolSize)
@@ -241,14 +244,22 @@ class NCFOptimizer2[T: ClassTag](
           s"Throughput is ${batch.size().toDouble / (end - dataFetchTime) * 1e9} record / second. " +
           optimMethod.getHyperParameter()
           )
+        validate(head)
         state("epoch") = state[Int]("epoch") + 1
-//        dataset.shuffle()
-        iter = dataset.toLocal().data(train = true)
+        validate(head)
+        checkpoint(wallClockTime)
+        println(s"HitRate is ${state("HitRatio@10")}, epoch is ${state("epoch")}")
+        if (!endWhen(state)) {
+          val generationStart = System.currentTimeMillis()
+          dataset.shuffle()
+          iter = dataset.toLocal().data(train = true)
+          logger.info(s"Generate epoch ${state("epoch")} data: ${System.currentTimeMillis() - generationStart} ms")
+        }
         count = 0
       }
 
-      validate(head)
-      checkpoint(wallClockTime)
+      trueWallClockTime += System.nanoTime() - start
+
     }
     ncfModel.embeddingModel.getParameters()._1.copy(embeddingWeight)
     ncfModel.ncfLayers.getParameters()._1.copy(linearsWeight)
@@ -335,7 +346,8 @@ class NCFOptimizer2[T: ClassTag](
       }
     }).zip(vMethods).foreach(r => {
       logger.info(s"$header ${r._2} is ${r._1}")
-      state(r._2) = r._1
+      logger.info(s"$header ${r._2.toString()} is ${r._1.result()._1}")
+      state(r._2.toString()) = r._1.result()._1
     })
     val timeCost = (System.nanoTime() - start) / 1e9
     logger.info(s"$header Validation time cost: ${timeCost}s. Throughput is ${
