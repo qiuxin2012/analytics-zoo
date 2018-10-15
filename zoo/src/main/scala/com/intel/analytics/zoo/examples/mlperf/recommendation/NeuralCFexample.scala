@@ -412,11 +412,13 @@ object NeuralCFexample {
   def maxEpochAndHr(maxEpoch: Int, maxHr: Float): Trigger = {
     new Trigger() {
       override def apply(state: Table): Boolean = {
-        if (state.contains("HitRatio@10")) {
+        val hrEnd = if (state.contains("HitRatio@10")) {
           state[Float]("HitRatio@10") > maxHr
         } else {
           false
-        } || state[Int]("epoch") > maxEpoch
+        }
+        val epochEnd = state[Int]("epoch") > maxEpoch
+        hrEnd || epochEnd
       }
     }
   }

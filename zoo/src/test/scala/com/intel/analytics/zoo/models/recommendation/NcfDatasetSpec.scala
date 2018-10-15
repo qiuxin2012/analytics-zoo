@@ -313,7 +313,6 @@ class NcfDatasetSpec extends ZooSpecHelper{
 
   }
 
-
   "trigger" should "works fine" in {
     val trigger = NeuralCFexample.maxEpochAndHr(5, 0.45f)
     val state = T()
@@ -321,11 +320,26 @@ class NcfDatasetSpec extends ZooSpecHelper{
     state("HitRatio@10") = 0.1f
 
     while(!trigger(state)) {
-      println(state("epoch"))
-      println(state("HitRatio@10"))
       state("epoch") = state[Int]("epoch") + 1
       state("HitRatio@10") = state[Float]("HitRatio@10") + 0.1f
-
     }
+
+    state[Int]("epoch") should be (5)
+    state[Float]("HitRatio@10") should be (0.5f)
+  }
+
+  "trigger" should "works fine 2" in {
+    val trigger = NeuralCFexample.maxEpochAndHr(5, 0.9f)
+    val state = T()
+    state("epoch") = 1
+    state("HitRatio@10") = 0.1f
+
+    while(!trigger(state)) {
+      state("epoch") = state[Int]("epoch") + 1
+      state("HitRatio@10") = state[Float]("HitRatio@10") + 0.1f
+    }
+
+    state[Int]("epoch") should be (6)
+    state[Float]("HitRatio@10") should be (0.6f)
   }
 }
