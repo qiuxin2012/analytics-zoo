@@ -103,7 +103,6 @@ class NCFOptimizer2[T: ClassTag](
   override def optimize(): Module[T] = {
     MklDnn.isLoaded
     var wallClockTime = 0L
-    var trueWallClockTime = 0L
     var count = 0
 //    optimMethods.values.foreach { optimMethod =>
 //      optimMethod.clearHistory()
@@ -260,8 +259,6 @@ class NCFOptimizer2[T: ClassTag](
         count = 0
       }
 
-      trueWallClockTime += System.nanoTime() - start
-
     }
     ncfModel.embeddingModel.getParameters()._1.copy(embeddingWeight)
     ncfModel.ncfLayers.getParameters()._1.copy(linearsWeight)
@@ -348,7 +345,6 @@ class NCFOptimizer2[T: ClassTag](
       }
     }).zip(vMethods).foreach(r => {
       logger.info(s"$header ${r._2} is ${r._1}")
-      logger.info(s"$header ${r._2.toString()} is ${r._1.result()._1}")
       state(r._2.toString()) = r._1.result()._1
     })
     val timeCost = (System.nanoTime() - start) / 1e9

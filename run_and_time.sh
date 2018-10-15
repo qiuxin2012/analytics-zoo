@@ -12,7 +12,7 @@ start_fmt=$(date +%Y-%m-%d\ %r)
 echo "STARTING TIMING RUN AT $start_fmt"
 
 # Get command line parallelism
-parallelism=${1:-56}
+parallelism=${1:-28}
 
 # Get command line seed
 seed=${2:-1}
