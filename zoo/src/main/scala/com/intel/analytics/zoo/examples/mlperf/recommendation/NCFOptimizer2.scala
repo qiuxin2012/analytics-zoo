@@ -224,12 +224,6 @@ class NCFOptimizer2[T: ClassTag](
       wallClockTime += end - start
       count += batch.size()
       val head = header(state[Int]("epoch"), count, numSamples, state[Int]("neval"), wallClockTime)
-      logger.info(s"$head " +
-        s"loss is $loss, iteration time is ${(end - start) / 1e9}s " +
-        s"train time ${(end - dataFetchTime) / 1e9}s. " +
-        s"Throughput is ${batch.size().toDouble / (end - dataFetchTime) * 1e9} record / second. " +
-        optimMethod.getHyperParameter()
-        )
       /*logger.info( s"data fetch time is ${(dataFetchTime - start) / 1e9}s " +
         s"model computing time is ${(computingTime - dataFetchTime) / 1e9}s " +
         s"zero grad time is ${(zeroGradTime - computingTime) / 1e9}s " +
@@ -241,6 +235,12 @@ class NCFOptimizer2[T: ClassTag](
       state("neval") = state[Int]("neval") + 1
 
       if (count >= numSamples) {
+        logger.info(s"$head " +
+          s"loss is $loss, iteration time is ${(end - start) / 1e9}s " +
+          s"train time ${(end - dataFetchTime) / 1e9}s. " +
+          s"Throughput is ${batch.size().toDouble / (end - dataFetchTime) * 1e9} record / second. " +
+          optimMethod.getHyperParameter()
+          )
         state("epoch") = state[Int]("epoch") + 1
 //        dataset.shuffle()
         iter = dataset.toLocal().data(train = true)
