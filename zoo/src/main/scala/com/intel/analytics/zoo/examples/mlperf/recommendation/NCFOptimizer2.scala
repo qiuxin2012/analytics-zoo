@@ -119,6 +119,10 @@ class NCFOptimizer2[T: ClassTag](
     val numSamples = dataset.toLocal().data(train = false).map(_.size()).reduce(_ + _)
     var iter = dataset.toLocal().data(train = true)
     logger.info("model thread pool size is " + Engine.model.getPoolSize)
+    if (validationTrigger.isDefined) { // init trigger
+      validationTrigger.get.apply(state)
+    }
+
     while (!endWhen(state)) {
       val start = System.nanoTime()
 
@@ -244,7 +248,6 @@ class NCFOptimizer2[T: ClassTag](
           s"Throughput is ${batch.size().toDouble / (end - dataFetchTime) * 1e9} record / second. " +
           optimMethod.getHyperParameter()
           )
-        validate(head)
         state("epoch") = state[Int]("epoch") + 1
         validate(head)
         checkpoint(wallClockTime)
