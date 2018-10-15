@@ -251,7 +251,6 @@ class NCFOptimizer2[T: ClassTag](
         state("epoch") = state[Int]("epoch") + 1
         validate(head)
         checkpoint(wallClockTime)
-        println(s"HitRate is ${state("HitRatio@10")}, epoch is ${state("epoch")}")
         if (!endWhen(state)) {
           val generationStart = System.currentTimeMillis()
           dataset.shuffle()
