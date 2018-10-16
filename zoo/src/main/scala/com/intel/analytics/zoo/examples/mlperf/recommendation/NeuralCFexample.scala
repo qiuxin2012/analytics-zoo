@@ -52,7 +52,10 @@ case class NeuralCFParams(val inputDir: String = "./data/ml-1m",
                           val valNegtiveNum: Int = 100,
                           val layers: String = "64,32,16,8",
                           val numFactors: Int = 8,
-                          val seed: Int = 1
+                          val seed: Int = 1,
+                          val beta1: Double = 0.9,
+                          val beta2: Double = 0.999,
+                          val eps: Double = 1e-8
                     )
 
 case class Rating(userId: Int, itemId: Int, label: Int, timestamp: Int, train: Boolean)
@@ -83,6 +86,15 @@ object NeuralCFexample {
       opt[Double]("lrd")
         .text("learning rate decay")
         .action((x, c) => c.copy(learningRateDecay = x))
+      opt[Double]("beta1")
+        .text("coefficients used for computing running averages of gradient in adam")
+        .action((x, c) => c.copy(beta1 = x))
+      opt[Double]("beta2")
+        .text("coefficients used for computing running averages of square gradient in adam")
+        .action((x, c) => c.copy(beta2 = x))
+      opt[Double]("eps")
+        .text("eps in adam")
+        .action((x, c) => c.copy(eps = x))
       opt[Int]("trainNeg")
         .text("The Number of negative instances to pair with a positive train instance.")
         .action((x, c) => c.copy(trainNegtiveNum = x))
@@ -109,6 +121,8 @@ object NeuralCFexample {
   }
 
   def run(param: NeuralCFParams): Unit = {
+    println(s"Running NCF, batchSize: ${param.batchSize}, beta1: ${param.beta1}, beta2: ${param.beta2}, " +
+      s"eps: ${param.eps}, maxEpoch:${param.nEpochs}")
     Logger.getLogger("org").setLevel(Level.ERROR)
     val conf = new SparkConf()
     conf.setAppName("NCFExample").set("spark.sql.crossJoin.enabled", "true")
@@ -119,10 +133,16 @@ object NeuralCFexample {
     val optimMethod = Map(
       "embeddings" -> new EmbeddingAdam2[Float](
         learningRate = param.learningRate,
-        learningRateDecay = param.learningRateDecay),
+        learningRateDecay = param.learningRateDecay,
+        beta1 = param.beta1,
+        beta2 = param.beta2,
+        eps = param.eps),
       "linears" -> new ParallelAdam[Float](
         learningRate = param.learningRate,
-        learningRateDecay = param.learningRateDecay))
+        learningRateDecay = param.learningRateDecay,
+        beta1 = param.beta1,
+        beta2 = param.beta2,
+        Epsilon = param.eps))
     println(s"${param.learningRate}, ${param.learningRateDecay}")
     val validateBatchSize = optimMethod("linears").asInstanceOf[ParallelAdam[Float]].parallelNum
 

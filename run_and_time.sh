@@ -1,7 +1,7 @@
 #!/bin/bash
 # runs benchmark and reports time to convergence
 # to use the script:
-#   run_and_time.sh <core number> <random seed>
+#   run_and_time.sh <core number> <random seed> <batch size> <beta1> <beta2> <max epoch>
 
 THRESHOLD=0.635
 BASEDIR=$(dirname -- "$0")
@@ -17,6 +17,18 @@ core=${1:-56}
 # Get command line seed
 seed=${2:-1}
 
+# BatchSize
+b=${3:-2048}
+
+# beta1
+beta1=${4:-0.9}
+
+# beta2
+beta2=${5:-0.999}
+
+# maxEpoch
+e=${6:-7}
+
 echo "unzip ml-20m.zip"
 if unzip -o ml-20m.zip
 then
@@ -26,8 +38,8 @@ then
       --conf "spark.driver.extraJavaOptions=-Dbigdl.utils.Engine.defaultPoolSize=$core" \
       --class com.intel.analytics.zoo.examples.mlperf.recommendation.NeuralCFexample \
       dist/lib/analytics-zoo-bigdl_0.7.0-SNAPSHOT-spark_2.1.0-0.3.0-SNAPSHOT-jar-with-dependencies.jar \
-      --inputDir ml-20m -b 2048 -e 7 --valNeg 999 --layers 256,256,128,64 --numFactors 64 \
-      --dataset ml-20m -l 0.0005 --seed $seed
+      --inputDir ml-20m -b $b -e $e --valNeg 999 --layers 256,256,128,64 --numFactors 64 \
+      --dataset ml-20m -l 0.0005 --seed $seed --beta1 $beta1 --beta2 $beta2
     t1=$(date +%s)
 	delta=$(( $t1 - $t0 ))
     echo "Finish training in $delta seconds"
