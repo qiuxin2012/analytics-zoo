@@ -30,6 +30,10 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import scopt.OptionParser
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.immutable
+import scala.collection.parallel.mutable.ParArray
 import scala.io.Source
 import scala.util.{Random, Sorting}
 
@@ -168,6 +172,72 @@ object GenerateData {
     }).collect()
 
     (evalPos, trainSet, valSamples)
+  }
+
+  def generateTrainValSetLocal(ratings: Array[Row], itemCount: Int, trainNegNum: Int = 4,
+    valNegNum: Int = 100): (Map[Int, Int], Array[(Int, Set[Int])], Array[Sample[Float]]) = {
+    val groupedRatings = ratings.groupBy(e => e.userId).par
+
+    groupedRatings.foreach(x => Sorting.quickSort(x._2))
+    val groupUserAndItems = groupedRatings.map(x => (x._1, x._2.map(_.itemId)))
+
+    val evalPos = groupUserAndItems.filter(_._2.length >= 20).map {x =>
+      val rows = x._2
+      val last = rows.last
+      x._1 -> last
+    }
+
+    val trainSet = groupUserAndItems.map { x =>
+      val rows = x._2
+      val last = rows.last
+      if (rows.length >= 20) {
+        x._1 -> rows.take(rows.length - 1).toSet
+      } else {
+        x._1 -> rows.toSet
+      }
+    }
+
+    val negsResult = groupUserAndItems.map { x =>
+      val key = x._1
+      val items = x._2.toSet
+
+      val gen = new Random(key)
+      val negs = new Array[Int](valNegNum)
+
+      var i = 0
+      while(i < valNegNum) {
+        val negItem = gen.nextInt(itemCount) + 1
+        if (!items.contains(negItem)) {
+          negs(i) = negItem
+          i += 1
+        }
+      }
+
+      key -> negs
+    }
+
+    val valSamples = negsResult.map { record =>
+      val userId = record._1
+      val negs = record._2
+      val posItem = evalPos(userId)
+      val distinctNegs = negs.distinct
+      val testFeature = Tensor[Float](1 + negs.length, 2)
+      testFeature.select(2, 1).fill(userId)
+      val testLabel = Tensor[Float](1 + negs.length).fill(0)
+      var i = 1
+      while (i <= distinctNegs.length) {
+        testFeature.setValue(i, 2, distinctNegs(i - 1))
+        i += 1
+      }
+      testFeature.setValue(i, 2, posItem)
+      testLabel.setValue(i, 1)
+      testFeature.narrow(1, i + 1, negs.length - distinctNegs.length).fill(1)
+      testLabel.narrow(1, i + 1, negs.length - distinctNegs.length).fill(-1)
+
+      Sample(testFeature, testLabel)
+    }
+
+    (evalPos.seq, trainSet.toArray, valSamples.toArray)
   }
 
   def saveTrainToBinary(data: Iterator[MiniBatch[Float]], des: String, batchSize: Int = 2048): Unit = {
