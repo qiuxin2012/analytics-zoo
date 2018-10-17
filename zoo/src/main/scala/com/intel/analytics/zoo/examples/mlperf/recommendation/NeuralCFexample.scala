@@ -143,6 +143,7 @@ object NeuralCFexample {
     val trainDataset = new NCFDataSet(trainSet, evalPos,
       param.trainNegtiveNum, param.batchSize, userCount, itemCount,
       seed = param.seed, processes = validateBatchSize)
+    println(s"load and generate train and validation data set takes ${(System.nanoTime() - start1) / 1e9} s")
 //    var start = System.currentTimeMillis()
 //    trainDataset.shuffle()
 //    println(s"Generate epoch 1 data: ${System.currentTimeMillis() - start} ms")
@@ -304,19 +305,16 @@ object NeuralCFexample {
       Row(userId, itemId, row(2).toFloat, row(3).toLong, train = true)
     }.toArray.par
     bufferedSource.close
-    println(s"read csv time ${(System.nanoTime() - start) / 1e9}")
 
     val sortedUniqueMovies = uniqueMovies.toArray
     Sorting.quickSort(sortedUniqueMovies)
     val length = sortedUniqueMovies.length
-    println(s"distinct and sort time ${(System.nanoTime() - start) / 1e9}")
 
     val mapping = sortedUniqueMovies.zip(1 to sortedUniqueMovies.length).toMap
     val parMapping = mapping.par
     val ratings = rows.map { row =>
       Row(row.userId, parMapping(row.itemId), row.label, row.timeStamp, train = true)
     }
-    println(s"mapping time ${(System.nanoTime() - start) / 1e9}")
 
     (ratings.seq.toArray, userCount, length, mapping)
   }
