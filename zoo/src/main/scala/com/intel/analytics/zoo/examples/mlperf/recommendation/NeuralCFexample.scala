@@ -26,7 +26,7 @@ import com.intel.analytics.bigdl.numeric.NumericFloat
 import com.intel.analytics.bigdl.optim._
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.utils.{Engine, File, RandomGenerator, T}
+import com.intel.analytics.bigdl.utils._
 import com.intel.analytics.zoo.common.NNContext
 import com.intel.analytics.zoo.models.recommendation.{NeuralCF, NeuralCFV2, UserItemFeature, Utils}
 import org.apache.log4j.{Level, Logger}
@@ -52,7 +52,8 @@ case class NeuralCFParams(val inputDir: String = "./data/ml-1m",
                           val valNegtiveNum: Int = 100,
                           val layers: String = "64,32,16,8",
                           val numFactors: Int = 8,
-                          val seed: Int = 1
+                          val seed: Int = 1,
+                          val threshold: Float = 0.635f
                     )
 
 case class Rating(userId: Int, itemId: Int, label: Int, timestamp: Int, train: Boolean)
@@ -95,6 +96,9 @@ object NeuralCFexample {
       opt[Int]("seed")
         .text("Random seed to generate data and model")
         .action((x, c) => c.copy(seed = x))
+      opt[Double]("threshold")
+        .text("End training when hit this threshold")
+        .action((x, c) => c.copy(threshold = x.toFloat))
       opt[Int]("numFactors")
         .text("The Embedding size of MF model.")
         .action((x, c) => c.copy(numFactors = x))
@@ -109,6 +113,7 @@ object NeuralCFexample {
   }
 
   def run(param: NeuralCFParams): Unit = {
+    println(s"Target HR is ${param.threshold}, seed is ${param.seed}")
     Logger.getLogger("org").setLevel(Level.ERROR)
     val conf = new SparkConf()
     conf.setAppName("NCFExample").set("spark.sql.crossJoin.enabled", "true")
@@ -137,9 +142,9 @@ object NeuralCFexample {
     val trainDataset = new NCFDataSet(trainSet, evalPos,
       param.trainNegtiveNum, param.batchSize, userCount, itemCount,
       seed = param.seed, processes = validateBatchSize)
-    var start = System.currentTimeMillis()
-    trainDataset.shuffle()
-    println(s"Generate epoch 1 data: ${System.currentTimeMillis() - start} ms")
+//    var start = System.currentTimeMillis()
+//    trainDataset.shuffle()
+//    println(s"Generate epoch 1 data: ${System.currentTimeMillis() - start} ms")
     val valDataset = (DataSet.array(valSample) ->
       SampleToMiniBatch[Float](validateBatchSize)).toLocal()
 
@@ -164,24 +169,24 @@ object NeuralCFexample {
         .setValidation(Trigger.everyEpoch, valDataset,
           Array(new HitRate[Float](negNum = param.valNegtiveNum),
           new Ndcg[Float](negNum = param.valNegtiveNum)))
-    val endTrigger = Trigger.maxEpoch(1)
+    val endTrigger = maxEpochAndHr(param.nEpochs, param.threshold)
     optimizer
       .setEndWhen(endTrigger)
       .optimize()
-    var e = 2
-    while(e <= param.nEpochs) {
-      println(s"Starting epoch $e/${param.nEpochs}")
-      val endTrigger = Trigger.maxEpoch(e)
-      start = System.currentTimeMillis()
-      trainDataset.shuffle()
-      println(s"Generate epoch ${e} data: ${System.currentTimeMillis() - start} ms")
-
-      optimizer
-        .setEndWhen(endTrigger)
-        .optimize()
-
-      e += 1
-    }
+//    var e = 2
+//    while(e <= param.nEpochs) {
+//      println(s"Starting epoch $e/${param.nEpochs}")
+//      val endTrigger = maxEpochAndHr(e, param.threshold)
+//      start = System.currentTimeMillis()
+//      trainDataset.shuffle()
+//      println(s"Generate epoch ${e} data: ${System.currentTimeMillis() - start} ms")
+//
+//      optimizer
+//        .setEndWhen(endTrigger)
+//        .optimize()
+//
+//      e += 1
+//    }
   }
 
   def loadPytorchTest(posFile: String, negFile: String): Array[Sample[Float]] = {
@@ -404,6 +409,20 @@ object NeuralCFexample {
     rddOfSample
   }
 
+  def maxEpochAndHr(maxEpoch: Int, maxHr: Float): Trigger = {
+    new Trigger() {
+      override def apply(state: Table): Boolean = {
+        val hrEnd = if (state.contains("HitRatio@10")) {
+          state[Float]("HitRatio@10") > maxHr
+        } else {
+          false
+        }
+        val epochEnd = state[Int]("epoch") > maxEpoch
+        hrEnd || epochEnd
+      }
+    }
+  }
+
 }
 
 class HitRate[T: ClassTag](k: Int = 10, negNum: Int = 100)(
@@ -426,7 +445,7 @@ class HitRate[T: ClassTag](k: Int = 10, negNum: Int = 100)(
     val hr = hitRate(exceptedTarget,
       o.narrow(1, 1, exceptedTarget), k)
 
-    new LossResult(hr, 1)
+    new ContiguousResult(hr, 1, s"HitRatio@$k")
   }
 
   def hitRate(index: Int, o: Tensor[T], k: Int): Float = {
@@ -447,7 +466,7 @@ class HitRate[T: ClassTag](k: Int = 10, negNum: Int = 100)(
     }
   }
 
-  override def format(): String = "HitRate@10"
+  override def format(): String = s"HitRatio@$k"
 }
 
 class Ndcg[T: ClassTag](k: Int = 10, negNum: Int = 100)(
@@ -469,7 +488,7 @@ class Ndcg[T: ClassTag](k: Int = 10, negNum: Int = 100)(
 
     val n = ndcg(exceptedTarget, o.narrow(1, 1, exceptedTarget), k)
 
-    new LossResult(n, 1)
+    new ContiguousResult(n, 1, s"NDCG")
   }
 
   def ndcg(index: Int, o: Tensor[T], k: Int): Float = {

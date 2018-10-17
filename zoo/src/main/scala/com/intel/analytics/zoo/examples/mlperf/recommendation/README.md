@@ -38,12 +38,12 @@ bash verify_dataset.sh
 ### Steps to run and time
 
 
-Run the `run_and_time.sh` script with an integer core and seed.
+Run the `run_and_time.sh` script with an integer parallelism and seed.
 CORE is the parallel number of BigDL, the best practice is physical core number of the machine.
 SEED is an interger value.
 
 ```bash
-bash run_and_time.sh CORE SEED
+bash run_and_time.sh PARALLELISM SEED
 ```
 
 # 3. Dataset/Environment
