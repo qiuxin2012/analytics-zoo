@@ -175,7 +175,7 @@ object GenerateData {
   }
 
   def generateTrainValSetLocal(ratings: Array[Row], itemCount: Int, trainNegNum: Int = 4,
-    valNegNum: Int = 100): (Map[Int, Int], Array[(Int, Set[Int])], Array[Sample[Float]]) = {
+    valNegNum: Int = 100, seed: Int = 1): (Map[Int, Int], Array[(Int, Set[Int])], Array[Sample[Float]]) = {
     val groupedRatings = ratings.groupBy(e => e.userId).par
 
     groupedRatings.foreach(x => Sorting.quickSort(x._2))
@@ -201,7 +201,7 @@ object GenerateData {
       val key = x._1
       val items = x._2.toSet
 
-      val gen = new Random(key)
+      val gen = new Random(key + seed)
       val negs = new Array[Int](valNegNum)
 
       var i = 0

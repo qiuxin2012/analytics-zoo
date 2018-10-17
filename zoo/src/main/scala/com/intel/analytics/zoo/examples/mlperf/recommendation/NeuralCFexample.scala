@@ -139,7 +139,7 @@ object NeuralCFexample {
     val start1 = System.nanoTime()
     val (ratings, userCount, itemCount, itemMapping) = loadPublicData(param.inputDir, param.dataset)
     val (evalPos, trainSet, valSample) = GenerateData.generateTrainValSetLocal(ratings, itemCount,
-        trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
+        trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum, seed = param.seed)
     val trainDataset = new NCFDataSet(trainSet, evalPos,
       param.trainNegtiveNum, param.batchSize, userCount, itemCount,
       seed = param.seed, processes = validateBatchSize)
