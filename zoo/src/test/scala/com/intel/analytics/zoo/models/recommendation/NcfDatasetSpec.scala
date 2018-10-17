@@ -36,7 +36,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val itemCount = 10
 
     val ncfD = new NCFDataSet(trainSet, valPos,
-      trainNegatives, batchSize, userCount, itemCount)
+      trainNegatives, batchSize, userCount, itemCount, processes = 3)
 
     RandomGenerator.RNG.setSeed(10)
     ncfD.shuffle()
@@ -88,7 +88,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val itemCount = 10
 
     val ncfD = new NCFDataSet(trainSet, valPos,
-      trainNegatives, batchSize, userCount, itemCount)
+      trainNegatives, batchSize, userCount, itemCount, processes = 3)
 
     RandomGenerator.RNG.setSeed(10)
     ncfD.shuffle()
@@ -153,7 +153,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val itemCount = 10
 
     val ncfD = new NCFDataSet(trainSet, valPos,
-      trainNegatives, batchSize, userCount, itemCount)
+      trainNegatives, batchSize, userCount, itemCount, processes = 3)
     val userCounts = new Array[Int](8)
 
     RandomGenerator.RNG.setSeed(10)
@@ -223,7 +223,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val itemCount = 10
 
     val ncfD = new NCFDataSet(trainSet, valPos,
-      trainNegatives, batchSize, userCount, itemCount)
+      trainNegatives, batchSize, userCount, itemCount, processes = 3)
 
     RandomGenerator.RNG.setSeed(10)
     ncfD.shuffle()
@@ -267,7 +267,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val learningRate = 1e-3
 
     val trainDataset = new NCFDataSet(trainSet, valPos,
-      trainNegatives, batchSize, userCount, itemCount)
+      trainNegatives, batchSize, userCount, itemCount, processes = 3)
     trainDataset.shuffle()
 
     val hiddenLayers = Array(16, 16, 8, 4)

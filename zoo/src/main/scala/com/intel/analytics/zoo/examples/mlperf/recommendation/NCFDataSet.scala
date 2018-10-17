@@ -21,6 +21,7 @@ class NCFDataSet (
     itemCount: Int,
     var seed: Int = 1,
     val processes: Int = 10) extends LocalDataSet[MiniBatch[Float]] {
+  println(s"creating ncfDataset with ${processes} thread")
 
   val trainSize = trainSet.map(_._2.size).sum
   // origin set use to random train negatives
@@ -33,18 +34,22 @@ class NCFDataSet (
   val labelBuffer = new Array[Float](trainSize * (1 + trainNegatives))
 
   override def shuffle(): Unit = {
+    val start = System.currentTimeMillis()
     NCFDataSet.generateNegativeItems(originSet,
                               inputBuffer,
                               trainNegatives,
       processes, // TODO
                               itemCount,
       seed)
+    println(s"gen neg time ${System.currentTimeMillis() - start} ms")
     seed += itemCount
     System.arraycopy(trainPositiveBuffer, 0, inputBuffer,
       trainSize * trainNegatives * 2, trainSize * 2)
     util.Arrays.fill(labelBuffer, 0, trainSize * trainNegatives, 0)
     util.Arrays.fill(labelBuffer, trainSize * trainNegatives, trainSize * (1 + trainNegatives), 1)
-    NCFDataSet.shuffle(inputBuffer, labelBuffer, seed)
+    println(s"fill time cost ${System.currentTimeMillis() - start} ms")
+    NCFDataSet.shuffle(inputBuffer, labelBuffer, seed, processes)
+    println(s"shuffle time cost ${System.currentTimeMillis() - start} ms")
   }
 
   override def data(train: Boolean): Iterator[MiniBatch[Float]] = {
@@ -91,7 +96,9 @@ class NCFDataSet (
 
 object NCFDataSet {
   val context = new ExecutionContext {
-    val threadPool = Executors.newFixedThreadPool(56, new ThreadFactory {
+    val threadPool = Executors.newFixedThreadPool(
+      System.getProperty("bigdl.utils.Engine.defaultPoolSize", "56").toInt,
+      new ThreadFactory {
       override def newThread(r: Runnable): Thread = {
         val t = Executors.defaultThreadFactory().newThread(r)
         t.setDaemon(true)
@@ -128,24 +135,48 @@ object NCFDataSet {
 
   def shuffle(inputBuffer: Array[Float],
               labelBuffer: Array[Float],
-              seed: Int): Unit = {
-    val rand = new Random(seed)
-    var i = 0
+              seed: Int,
+              parallelism: Int): Unit = {
     val length = inputBuffer.length / 2
-    while (i < length) {
-      val exchange = rand.nextInt(length - i) + i
-      val tmp1 = inputBuffer(exchange * 2)
-      val tmp2 = inputBuffer(exchange * 2 + 1)
-      inputBuffer(exchange * 2) = inputBuffer(i * 2)
-      inputBuffer(exchange * 2 + 1) = inputBuffer(i * 2 + 1)
-      inputBuffer(2 * i) = tmp1
-      inputBuffer(2 * i + 1) = tmp2
+    val extraSize = length % parallelism
+    val taskSize = math.floor(length / parallelism).toInt
 
-      val labelTmp = labelBuffer(exchange)
-      labelBuffer(exchange) = labelBuffer(i)
-      labelBuffer(i) = labelTmp
-      i += 1
+    val seeds = Array.tabulate(parallelism)(i =>{
+      val rand = new Random(seed + i)
+      val length = if (i < extraSize) taskSize + 1 else taskSize
+      (i, length, rand)
+    }).par
+    seeds.foreach{v =>
+      val offset = v._1
+      val length = v._2
+      val rand = v._3
+      var i = 0
+      while(i < length) {
+        val ex = rand.nextInt(length) * parallelism + offset
+        val current = i * parallelism + offset
+        if (ex != current) {
+          exchange(inputBuffer, labelBuffer,
+            current, ex)
+
+        }
+        i += 1
+      }
     }
+  }
+
+  private def exchange(inputBuffer: Array[Float],
+                       labelBuffer: Array[Float],
+                       current: Int, exchange: Int): Unit = {
+    val tmp1 = inputBuffer(exchange * 2)
+    val tmp2 = inputBuffer(exchange * 2 + 1)
+    inputBuffer(exchange * 2) = inputBuffer(current * 2)
+    inputBuffer(exchange * 2 + 1) = inputBuffer(current * 2 + 1)
+    inputBuffer(2 * current) = tmp1
+    inputBuffer(2 * current + 1) = tmp2
+
+    val labelTmp = labelBuffer(exchange)
+    labelBuffer(exchange) = labelBuffer(current)
+    labelBuffer(current) = labelTmp
   }
 
   def generateNegativeItems(originSet: Seq[(Int, Set[Int])],
