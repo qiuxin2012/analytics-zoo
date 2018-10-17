@@ -281,7 +281,7 @@ object NeuralCFexample {
     (mappedRating, userCount, uniqueMovie.length, mapping)
   }
 
-  case class Row(userId: Int, itemId: Int, label: Float, timeStamp: Long, train: Boolean)
+  case class Row(userId: Int, itemId: Int, label: Float, timeStamp: Long)
   trait RowOrdering extends Ordering[Row] {
     def compare(x: Row, y: Row): Int = x.timeStamp compare y.timeStamp
   }
@@ -302,7 +302,7 @@ object NeuralCFexample {
       if (userId > userCount) userCount = userId
       uniqueMovies.add(itemId)
 
-      Row(userId, itemId, row(2).toFloat, row(3).toLong, train = true)
+      Row(userId, itemId, row(2).toFloat, row(3).toLong)
     }.toArray.par
     bufferedSource.close
 
@@ -313,7 +313,7 @@ object NeuralCFexample {
     val mapping = sortedUniqueMovies.zip(1 to sortedUniqueMovies.length).toMap
     val parMapping = mapping.par
     val ratings = rows.map { row =>
-      Row(row.userId, parMapping(row.itemId), row.label, row.timeStamp, train = true)
+      Row(row.userId, parMapping(row.itemId), row.label, row.timeStamp)
     }
 
     (ratings.seq.toArray, userCount, length, mapping)
