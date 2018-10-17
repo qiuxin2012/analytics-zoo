@@ -16,6 +16,7 @@
 
 package com.intel.analytics.zoo.examples.mlperf.recommendation
 
+import java.io.File
 import java.util
 
 import com.intel.analytics.bigdl._
@@ -38,9 +39,10 @@ import scopt.OptionParser
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.parallel.mutable.ParArray
 import scala.io.Source
 import scala.reflect.ClassTag
-import scala.util.Random
+import scala.util.{Random, Sorting}
 
 case class NeuralCFParams(val inputDir: String = "./data/ml-1m",
                           val dataset: String = "ml-1m",
@@ -134,14 +136,14 @@ object NeuralCFexample {
     val hiddenLayers = param.layers.split(",").map(_.toInt)
     RandomGenerator.RNG.setSeed(param.seed)
 
-    val (ratings, userCount, itemCount, itemMapping) =
-      loadPublicData(sqlContext, param.inputDir, param.dataset)
-    ratings.cache()
-    val (evalPos, trainSet, valSample) = GenerateData.generateTrainValSet(ratings, userCount, itemCount,
-      trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
+    val start1 = System.nanoTime()
+    val (ratings, userCount, itemCount, itemMapping) = loadPublicData(param.inputDir, param.dataset)
+    val (evalPos, trainSet, valSample) = GenerateData.generateTrainValSetLocal(ratings, itemCount,
+        trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
     val trainDataset = new NCFDataSet(trainSet, evalPos,
       param.trainNegtiveNum, param.batchSize, userCount, itemCount,
       seed = param.seed, processes = validateBatchSize)
+    println(s"load and generate train and validation data set takes ${(System.nanoTime() - start1) / 1e9} s")
 //    var start = System.currentTimeMillis()
 //    trainDataset.shuffle()
 //    println(s"Generate epoch 1 data: ${System.currentTimeMillis() - start} ms")
@@ -277,6 +279,44 @@ object NeuralCFexample {
     mappedRating.show()
 
     (mappedRating, userCount, uniqueMovie.length, mapping)
+  }
+
+  case class Row(userId: Int, itemId: Int, label: Float, timeStamp: Long)
+  trait RowOrdering extends Ordering[Row] {
+    def compare(x: Row, y: Row): Int = x.timeStamp compare y.timeStamp
+  }
+  implicit object Row extends RowOrdering
+
+  def loadPublicData(dataPath: String, dataset: String): (Array[Row], Int, Int, Map[Int, Int]) = {
+    val start = System.nanoTime()
+    var userCount = 0
+    val uniqueMovies = scala.collection.mutable.Set[Int]()
+
+    val path = new File(dataPath, "/ratings.csv").getAbsolutePath
+    val bufferedSource = scala.io.Source.fromFile(path)
+    val rows = bufferedSource.getLines().drop(1).map { line =>
+      val row = line.split(",").map(_.trim)
+      val userId = row(0).toInt
+      val itemId = row(1).toInt
+
+      if (userId > userCount) userCount = userId
+      uniqueMovies.add(itemId)
+
+      Row(userId, itemId, row(2).toFloat, row(3).toLong)
+    }.toArray.par
+    bufferedSource.close
+
+    val sortedUniqueMovies = uniqueMovies.toArray
+    Sorting.quickSort(sortedUniqueMovies)
+    val length = sortedUniqueMovies.length
+
+    val mapping = sortedUniqueMovies.zip(1 to sortedUniqueMovies.length).toMap
+    val parMapping = mapping.par
+    val ratings = rows.map { row =>
+      Row(row.userId, parMapping(row.itemId), row.label, row.timeStamp)
+    }
+
+    (ratings.seq.toArray, userCount, length, mapping)
   }
 
   def loadMl1mData(sqlContext: SQLContext, dataPath: String): DataFrame = {
