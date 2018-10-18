@@ -42,7 +42,6 @@ class NCFDataSet (
                               itemCount,
       seed)
     println(s"gen neg time ${System.currentTimeMillis() - start} ms")
-    seed += itemCount
     System.arraycopy(trainPositiveBuffer, 0, inputBuffer,
       trainSize * trainNegatives * 2, trainSize * 2)
     util.Arrays.fill(labelBuffer, 0, trainSize * trainNegatives, 0)
@@ -50,6 +49,8 @@ class NCFDataSet (
     println(s"fill time cost ${System.currentTimeMillis() - start} ms")
     NCFDataSet.shuffle(inputBuffer, labelBuffer, seed, processes)
     println(s"shuffle time cost ${System.currentTimeMillis() - start} ms")
+    seed += itemCount
+    println(s"ncf dataset change seed to ${seed}")
   }
 
   override def data(train: Boolean): Iterator[MiniBatch[Float]] = {
@@ -95,23 +96,6 @@ class NCFDataSet (
 }
 
 object NCFDataSet {
-  val context = new ExecutionContext {
-    val threadPool = Executors.newFixedThreadPool(
-      System.getProperty("bigdl.utils.Engine.defaultPoolSize", "56").toInt,
-      new ThreadFactory {
-      override def newThread(r: Runnable): Thread = {
-        val t = Executors.defaultThreadFactory().newThread(r)
-        t.setDaemon(true)
-        t
-      }
-    })
-
-    def execute(runnable: Runnable) {
-      threadPool.submit(runnable)
-    }
-
-    def reportFailure(t: Throwable) {}
-  }
 
   def copy(trainSet: Seq[(Int, Set[Int])], trainBuffer: Array[Float]): Unit = {
     var i = 0
@@ -184,7 +168,7 @@ object NCFDataSet {
                         trainNeg: Int,
                         processes: Int,
                         itemCount: Int,
-                            seed: Int): Unit = {
+                        seed: Int): Unit = {
     val size = Math.ceil(originSet.size / processes).toInt
     val lastOffset = size * (processes - 1)
     val processesOffset = Array.tabulate[Int](processes)(_ * size)
@@ -207,40 +191,32 @@ object NCFDataSet {
     val numItemAndOffset = (0 until processes).map{p =>
       (numItems(p)._1, numItems(p)._2,
         numItems.slice(0, p).map(_._3).sum * trainNeg)
-    }
+    }.par
 
-    numItemAndOffset.map(v => Future {
-      try {
-        val length = v._1
-        var offset = v._2
-        var itemOffset = v._3
-        val rand = new Random(offset + seed)
+    numItemAndOffset.foreach{ v =>
+      val length = v._1
+      var offset = v._2
+      var itemOffset = v._3
+      val rand = new Random(offset + seed)
 
-        while(offset < v._2 + length) {
-          val userId = originSet(offset)._1
-          val items = originSet(offset)._2
-          var i = 0
-          while (i < (items.size - 1) * trainNeg) {
-            var negItem = rand.nextInt(itemCount) + 1
-            while (items.contains(negItem)) {
-              negItem = rand.nextInt(itemCount) + 1
-            }
-            val negItemOffset = itemOffset * 2
-            buffer(negItemOffset) = userId
-            buffer(negItemOffset + 1) = negItem
-
-            i += 1
-            itemOffset += 1
+      while (offset < v._2 + length) {
+        val userId = originSet(offset)._1
+        val items = originSet(offset)._2
+        var i = 0
+        while (i < (items.size - 1) * trainNeg) {
+          var negItem = rand.nextInt(itemCount) + 1
+          while (items.contains(negItem)) {
+            negItem = rand.nextInt(itemCount) + 1
           }
-          offset += 1
+          val negItemOffset = itemOffset * 2
+          buffer(negItemOffset) = userId
+          buffer(negItemOffset + 1) = negItem
+
+          i += 1
+          itemOffset += 1
         }
-      } catch {
-        case t : Throwable =>
-          //            logger.error("Error: " + ExceptionUtils.getStackTrace(t))
-          throw t
+        offset += 1
       }
-    }(context)).map(future => {
-      Await.result(future, Duration.Inf)
-    })
+    }
   }
 }

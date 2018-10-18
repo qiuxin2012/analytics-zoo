@@ -195,7 +195,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
     userCounts should be (Array.tabulate(8)(_ => 16))
   }
 
-  "dataset" should "generate right result 4" in {
+  "dataset shuffled" should "have different result" in {
     val trainSet = Array(
       (1, Set(2, 3)),
       (2, Set(3, 4)),
@@ -225,14 +225,53 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val ncfD = new NCFDataSet(trainSet, valPos,
       trainNegatives, batchSize, userCount, itemCount, processes = 3)
 
-    RandomGenerator.RNG.setSeed(10)
     ncfD.shuffle()
     val tensor1 = Tensor(ncfD.inputBuffer.clone(), Array(64, 2))
-    RandomGenerator.RNG.setSeed(10)
     ncfD.shuffle()
     val tensor2 = Tensor(ncfD.inputBuffer.clone(), Array(64, 2))
     tensor1 should not be (tensor2)
 
+  }
+
+  "two datasets with same seed" should "generate the same data" in {
+    val trainSet = Array(
+      (1, Set(2, 3)),
+      (2, Set(3, 4)),
+      (3, Set(4, 5)),
+      (4, Set(5, 6)),
+      (5, Set(6, 7)),
+      (6, Set(7, 8)),
+      (7, Set(8, 9)),
+      (8, Set(9, 10)))
+
+    val valPos = Map(
+      1 -> 1,
+      2 -> 2,
+      3 -> 3,
+      4 -> 4,
+      5 -> 5,
+      6 -> 6,
+      7 -> 7,
+      8 -> 8
+    )
+
+    val trainNegatives = 3
+    val batchSize = 4
+    val userCount = 8
+    val itemCount = 10
+
+    val ncfD = new NCFDataSet(trainSet, valPos,
+      trainNegatives, batchSize, userCount, itemCount, processes = 3)
+    ncfD.shuffle()
+    ncfD.shuffle()
+    val tensor1 = Tensor(ncfD.inputBuffer, Array(64, 2))
+    val ncfD2 = new NCFDataSet(trainSet, valPos,
+      trainNegatives, batchSize, userCount, itemCount, processes = 3)
+    ncfD2.shuffle()
+    val tensor2 = Tensor(ncfD2.inputBuffer, Array(64, 2))
+    tensor1 should not be (tensor2)
+    ncfD2.shuffle()
+    tensor1 should be (tensor2)
   }
 
   "dataset" should "run with ncfoptimizer" in {
