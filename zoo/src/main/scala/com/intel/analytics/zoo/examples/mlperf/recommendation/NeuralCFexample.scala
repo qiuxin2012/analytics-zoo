@@ -134,13 +134,12 @@ object NeuralCFexample {
     val validateBatchSize = optimMethod("linears").asInstanceOf[ParallelAdam[Float]].parallelNum
 
     val hiddenLayers = param.layers.split(",").map(_.toInt)
-    RandomGenerator.RNG.setSeed(param.seed)
 
     val start1 = System.nanoTime()
     val (ratings, userCount, itemCount, itemMapping) = loadPublicData(param.inputDir, param.dataset)
     val (evalPos, trainSet, valSample) = GenerateData.generateTrainValSetLocal(ratings, itemCount,
-        trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
-    val trainDataset = new NCFDataSet(trainSet, evalPos,
+        trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum, seed = param.seed)
+    val trainDataset = new NCFDataSet(trainSet.sortBy(_._1), evalPos,
       param.trainNegtiveNum, param.batchSize, userCount, itemCount,
       seed = param.seed, processes = validateBatchSize)
     println(s"load and generate train and validation data set takes ${(System.nanoTime() - start1) / 1e9} s")
@@ -150,6 +149,7 @@ object NeuralCFexample {
     val valDataset = (DataSet.array(valSample) ->
       SampleToMiniBatch[Float](validateBatchSize)).toLocal()
 
+    RandomGenerator.RNG.setSeed(param.seed)
     val ncf = NeuralCFV2[Float](
       userCount = userCount,
       itemCount = itemCount,

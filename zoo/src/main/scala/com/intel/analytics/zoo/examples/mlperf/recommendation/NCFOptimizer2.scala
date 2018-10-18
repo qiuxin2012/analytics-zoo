@@ -109,6 +109,7 @@ class NCFOptimizer2[T: ClassTag](
 //    }
     state("epoch") = state.get[Int]("epoch").getOrElse(1)
     state("neval") = state.get[Int]("neval").getOrElse(1)
+    state("trainingTime") = state.get[Long]("trainingTime").getOrElse(0L)
     state("isLayerwiseScaled") = Utils.isLayerwiseScaled(_model)
     val optimMethod: OptimMethod[T] = optimMethods("linears")
     val embeddingOptim: EmbeddingAdam2[T] = optimMethods("embeddings").asInstanceOf[EmbeddingAdam2[T]]
@@ -229,7 +230,6 @@ class NCFOptimizer2[T: ClassTag](
       val end = System.nanoTime()
       wallClockTime += end - start
       count += batch.size()
-      val head = header(state[Int]("epoch"), count, numSamples, state[Int]("neval"), wallClockTime)
       /*logger.info( s"data fetch time is ${(dataFetchTime - start) / 1e9}s " +
         s"model computing time is ${(computingTime - dataFetchTime) / 1e9}s " +
         s"zero grad time is ${(zeroGradTime - computingTime) / 1e9}s " +
@@ -241,12 +241,11 @@ class NCFOptimizer2[T: ClassTag](
       state("neval") = state[Int]("neval") + 1
 
       if (count >= numSamples) {
+        val head = header(state[Int]("epoch"), count, numSamples, state[Int]("neval"), wallClockTime)
         logger.info(s"$head " +
-          s"loss is $loss, iteration time is ${(end - start) / 1e9}s " +
-          s"train time ${(end - dataFetchTime) / 1e9}s. " +
-          s"Throughput is ${batch.size().toDouble / (end - dataFetchTime) * 1e9} record / second. " +
-          optimMethod.getHyperParameter()
-          )
+          s"loss is $loss, training cost ${(wallClockTime - state[Long]("trainingTime")) / 1e9}s. " +
+          s"Throughput is ${count * 1e9 / (wallClockTime - state[Long]("trainingTime"))} record / second. ")
+        state("trainingTime") = wallClockTime
         state("epoch") = state[Int]("epoch") + 1
         validate(head)
         checkpoint(wallClockTime)
@@ -349,7 +348,7 @@ class NCFOptimizer2[T: ClassTag](
     })
     val timeCost = (System.nanoTime() - start) / 1e9
     logger.info(s"$header Validation time cost: ${timeCost}s. Throughput is ${
-      count / (timeCost / 1e9) } users / sec")
+      count / timeCost} users / sec")
   }
 }
 
