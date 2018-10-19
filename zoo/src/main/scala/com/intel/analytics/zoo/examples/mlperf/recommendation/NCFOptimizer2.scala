@@ -26,6 +26,7 @@ import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, Activity}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.utils._
+import com.intel.analytics.zoo.examples.mlperf.recommendation.NcfLogger
 import com.intel.analytics.zoo.models.recommendation.NeuralCFV2
 import org.apache.log4j.Logger
 
@@ -101,12 +102,10 @@ class NCFOptimizer2[T: ClassTag](
     (1 to subModelNumber).map(_ => _criterion.cloneCriterion()).toArray
 
   override def optimize(): Module[T] = {
+    NcfLogger.info("train_loop")
     MklDnn.isLoaded
     var wallClockTime = 0L
     var count = 0
-//    optimMethods.values.foreach { optimMethod =>
-//      optimMethod.clearHistory()
-//    }
     state("epoch") = state.get[Int]("epoch").getOrElse(1)
     state("neval") = state.get[Int]("neval").getOrElse(1)
     state("trainingTime") = state.get[Long]("trainingTime").getOrElse(0L)
@@ -122,7 +121,11 @@ class NCFOptimizer2[T: ClassTag](
     if (validationTrigger.isDefined) { // init trigger
       validationTrigger.get.apply(state)
     }
+    // TODO: Delete
+    state("epoch") = 2
+    validate("123")
 
+    NcfLogger.info("train_epoch", state[Int]("epoch") - 1)
     while (!endWhen(state)) {
       val start = System.nanoTime()
 
@@ -168,7 +171,7 @@ class NCFOptimizer2[T: ClassTag](
           })
       ).sum
 
-      logger.debug(s"Max model time is ${modelTimeArray.max}," +
+      logger.info(s"Max model time is ${modelTimeArray.max}," +
         s"Time is ${modelTimeArray.sortWith((a, b) => a > b).mkString("\t")} ms")
 
       val loss = lossSum / parallelism
@@ -251,8 +254,10 @@ class NCFOptimizer2[T: ClassTag](
         checkpoint(wallClockTime)
         if (!endWhen(state)) {
           val generationStart = System.currentTimeMillis()
+          NcfLogger.info("input_step_train_neg_gen")
           dataset.shuffle()
           iter = dataset.toLocal().data(train = true)
+          NcfLogger.info("train_epoch", state[Int]("epoch") - 1)
           logger.info(s"Generate epoch ${state("epoch")} data: ${System.currentTimeMillis() - generationStart} ms")
         }
         count = 0
@@ -300,9 +305,12 @@ class NCFOptimizer2[T: ClassTag](
     val vMethods = validationMethods.get
     val vMethodsArr = (1 to subModelNumber).map(i => vMethods.map(_.clone())).toArray
     val dataIter = validationDataSet.get.toLocal().data(train = false)
+    val currentEpoch = state[Int]("epoch") - 2
+    NcfLogger.info("eval_start", currentEpoch)
     logger.info(s"$header Validate model...")
 
-    var count = 0
+    var userCount = 0
+    var sampleCount = 0
     val start = System.nanoTime()
     dataIter.map(batch => {
       val stackSize = batch.size() / subModelNumber
@@ -336,7 +344,8 @@ class NCFOptimizer2[T: ClassTag](
           l + r
         }
       })
-      count += batch.size()
+      sampleCount += batch.getInput.toTensor.size(2) * batch.getInput().toTensor.size(1)
+      userCount += batch.size()
       result
     }).reduce((left, right) => {
       left.zip(right).map { case (l, r) =>
@@ -344,11 +353,18 @@ class NCFOptimizer2[T: ClassTag](
       }
     }).zip(vMethods).foreach(r => {
       logger.info(s"$header ${r._2} is ${r._1}")
+      NcfLogger.info("eval_size", Array(("epoch", currentEpoch.toString),
+        ("value", sampleCount.toString)))
+      NcfLogger.info("eval_hp_num_users", userCount)
+      NcfLogger.info("eval_hp_num_neg", (sampleCount - userCount) / userCount)
+      NcfLogger.info("eval_accuracy", Array(("epoch", currentEpoch.toString),
+        ("value", r._1.result()._1.toString)))
       state(r._2.toString()) = r._1.result()._1
     })
     val timeCost = (System.nanoTime() - start) / 1e9
     logger.info(s"$header Validation time cost: ${timeCost}s. Throughput is ${
-      count / timeCost} users / sec")
+      sampleCount / timeCost} samples / sec")
+    NcfLogger.info("eval_stop")
   }
 }
 

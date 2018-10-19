@@ -21,7 +21,7 @@ class NCFDataSet (
     itemCount: Int,
     var seed: Int = 1,
     val processes: Int = 10) extends LocalDataSet[MiniBatch[Float]] {
-  println(s"creating ncfDataset with ${processes} thread")
+//  println(s"creating ncfDataset with ${processes} thread")
 
   val trainSize = trainSet.map(_._2.size).sum
   // origin set use to random train negatives
@@ -34,23 +34,19 @@ class NCFDataSet (
   val labelBuffer = new Array[Float](trainSize * (1 + trainNegatives))
 
   override def shuffle(): Unit = {
-    val start = System.currentTimeMillis()
+    NcfLogger.info("input_hp_num_neg", trainNegatives)
     NCFDataSet.generateNegativeItems(originSet,
                               inputBuffer,
                               trainNegatives,
       processes, // TODO
                               itemCount,
       seed)
-    println(s"gen neg time ${System.currentTimeMillis() - start} ms")
     System.arraycopy(trainPositiveBuffer, 0, inputBuffer,
       trainSize * trainNegatives * 2, trainSize * 2)
     util.Arrays.fill(labelBuffer, 0, trainSize * trainNegatives, 0)
     util.Arrays.fill(labelBuffer, trainSize * trainNegatives, trainSize * (1 + trainNegatives), 1)
-    println(s"fill time cost ${System.currentTimeMillis() - start} ms")
     NCFDataSet.shuffle(inputBuffer, labelBuffer, seed, processes)
-    println(s"shuffle time cost ${System.currentTimeMillis() - start} ms")
     seed += itemCount
-    println(s"ncf dataset change seed to ${seed}")
   }
 
   override def data(train: Boolean): Iterator[MiniBatch[Float]] = {

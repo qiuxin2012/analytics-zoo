@@ -41,6 +41,21 @@ object GenerateData {
   import NeuralCFexample._
 
   def main(args: Array[String]): Unit = {
+    val bufferedSource = scala.io.Source.fromFile("/home/xin/merge")
+    var i = 1
+    var hit = 0.0
+    val rows = bufferedSource.getLines().foreach{ line =>
+      val epoch = line.split(" ")(0).toInt
+      val hr = line.split(" ")(1).toDouble
+      if (epoch < i) {
+        val success = hit >= 0.635
+        println(s"$i $hit $success")
+      }
+      i = epoch
+      hit = hr
+    }
+    val success = hit >= 0.635
+    println(s"$i $hit $success")
 
     val defaultParams = NeuralCFParams()
 

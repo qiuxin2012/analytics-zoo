@@ -55,7 +55,10 @@ case class NeuralCFParams(val inputDir: String = "./data/ml-1m",
                           val layers: String = "64,32,16,8",
                           val numFactors: Int = 8,
                           val seed: Int = 1,
-                          val threshold: Float = 0.635f
+                          val threshold: Float = 0.635f,
+                          val beta1: Double = 0.9,
+                          val beta2: Double = 0.999,
+                          val eps: Double = 1e-8
                     )
 
 case class Rating(userId: Int, itemId: Int, label: Int, timestamp: Int, train: Boolean)
@@ -63,6 +66,7 @@ case class Rating(userId: Int, itemId: Int, label: Int, timestamp: Int, train: B
 object NeuralCFexample {
 
   def main(args: Array[String]): Unit = {
+    NcfLogger.info("run_start")
 
     val defaultParams = NeuralCFParams()
 
@@ -101,6 +105,15 @@ object NeuralCFexample {
       opt[Double]("threshold")
         .text("End training when hit this threshold")
         .action((x, c) => c.copy(threshold = x.toFloat))
+      opt[Double]("beta1")
+        .text("coefficients used for computing running averages of gradient in adam")
+        .action((x, c) => c.copy(beta1 = x))
+      opt[Double]("beta2")
+        .text("coefficients used for computing running averages of square gradient in adam")
+        .action((x, c) => c.copy(beta2 = x))
+      opt[Double]("eps")
+        .text("eps in adam")
+        .action((x, c) => c.copy(eps = x))
       opt[Int]("numFactors")
         .text("The Embedding size of MF model.")
         .action((x, c) => c.copy(numFactors = x))
@@ -115,37 +128,39 @@ object NeuralCFexample {
   }
 
   def run(param: NeuralCFParams): Unit = {
-    println(s"Target HR is ${param.threshold}, seed is ${param.seed}")
+//    NcfLogger.info(s"Target HR is ${param.threshold}, seed is ${param.seed}")
     Logger.getLogger("org").setLevel(Level.ERROR)
-    val conf = new SparkConf()
-    conf.setAppName("NCFExample").set("spark.sql.crossJoin.enabled", "true")
-      .set("spark.driver.maxResultSize", "2048")
-    val sc = NNContext.initNNContext(conf)
-    val sqlContext = SQLContext.getOrCreate(sc)
+    Logger.getLogger("com").setLevel(Level.ERROR)
+    Engine.init
 
+    NcfLogger.info("create_optim_method", Array(("name", "Adam"),
+      ("lr", param.learningRate.toString),
+      ("beta1", param.beta1.toString),
+      ("beta2", param.beta2.toString),
+      ("eps", param.eps.toString)))
     val optimMethod = Map(
       "embeddings" -> new EmbeddingAdam2[Float](
         learningRate = param.learningRate,
-        learningRateDecay = param.learningRateDecay),
+        learningRateDecay = param.learningRateDecay,
+        beta1 = param.beta1,
+        beta2 = param.beta2,
+        eps = param.eps),
       "linears" -> new ParallelAdam[Float](
         learningRate = param.learningRate,
-        learningRateDecay = param.learningRateDecay))
-    println(s"${param.learningRate}, ${param.learningRateDecay}")
+        learningRateDecay = param.learningRateDecay,
+        beta1 = param.beta1,
+        beta2 = param.beta2,
+        Epsilon = param.eps))
     val validateBatchSize = optimMethod("linears").asInstanceOf[ParallelAdam[Float]].parallelNum
 
     val hiddenLayers = param.layers.split(",").map(_.toInt)
 
-    val start1 = System.nanoTime()
     val (ratings, userCount, itemCount, itemMapping) = loadPublicData(param.inputDir, param.dataset)
     val (evalPos, trainSet, valSample) = GenerateData.generateTrainValSetLocal(ratings, itemCount,
         trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum, seed = param.seed)
     val trainDataset = new NCFDataSet(trainSet.sortBy(_._1), evalPos,
       param.trainNegtiveNum, param.batchSize, userCount, itemCount,
       seed = param.seed, processes = validateBatchSize)
-    println(s"load and generate train and validation data set takes ${(System.nanoTime() - start1) / 1e9} s")
-//    var start = System.currentTimeMillis()
-//    trainDataset.shuffle()
-//    println(s"Generate epoch 1 data: ${System.currentTimeMillis() - start} ms")
     val valDataset = (DataSet.array(valSample) ->
       SampleToMiniBatch[Float](validateBatchSize)).toLocal()
 
@@ -159,36 +174,24 @@ object NeuralCFexample {
       hiddenLayers = hiddenLayers.slice(1, hiddenLayers.length),
       mfEmbed = param.numFactors)
 
-    println(ncf)
-
-    println(s"parameter length: ${ncf.parameters()._1.map(_.nElement()).sum}")
+//    println(ncf)
+//    println(s"parameter length: ${ncf.parameters()._1.map(_.nElement()).sum}")
+    NcfLogger.info("model_hp_loss_fn", "binary_cross_entropy")
+    val criterion = BCECriterion[Float]()
 
     val optimizer = new NCFOptimizer2[Float](ncf,
-      trainDataset, BCECriterion[Float]())
+      trainDataset, criterion)
 
     optimizer
       .setOptimMethods(optimMethod)
         .setValidation(Trigger.everyEpoch, valDataset,
-          Array(new HitRate[Float](negNum = param.valNegtiveNum),
-          new Ndcg[Float](negNum = param.valNegtiveNum)))
+          Array(new HitRate[Float](negNum = param.valNegtiveNum)))
     val endTrigger = maxEpochAndHr(param.nEpochs, param.threshold)
     optimizer
       .setEndWhen(endTrigger)
       .optimize()
-//    var e = 2
-//    while(e <= param.nEpochs) {
-//      println(s"Starting epoch $e/${param.nEpochs}")
-//      val endTrigger = maxEpochAndHr(e, param.threshold)
-//      start = System.currentTimeMillis()
-//      trainDataset.shuffle()
-//      println(s"Generate epoch ${e} data: ${System.currentTimeMillis() - start} ms")
-//
-//      optimizer
-//        .setEndWhen(endTrigger)
-//        .optimize()
-//
-//      e += 1
-//    }
+    NcfLogger.info("run_final")
+    System.exit(0)
   }
 
   def loadPytorchTest(posFile: String, negFile: String): Array[Sample[Float]] = {
@@ -458,6 +461,14 @@ object NeuralCFexample {
           false
         }
         val epochEnd = state[Int]("epoch") > maxEpoch
+        if (hrEnd || epochEnd) {
+          NcfLogger.info("eval_target", maxHr)
+          if (hrEnd) {
+            NcfLogger.info("success", true)
+          } else {
+            NcfLogger.info("success", false)
+          }
+        }
         hrEnd || epochEnd
       }
     }
