@@ -128,7 +128,7 @@ object NeuralCFexample {
   }
 
   def run(param: NeuralCFParams): Unit = {
-//    NcfLogger.info(s"Target HR is ${param.threshold}, seed is ${param.seed}")
+    NcfLogger.info("seed", param.seed)
     Logger.getLogger("org").setLevel(Level.ERROR)
     Logger.getLogger("com").setLevel(Level.ERROR)
     Engine.init

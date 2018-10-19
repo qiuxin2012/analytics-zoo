@@ -121,9 +121,6 @@ class NCFOptimizer2[T: ClassTag](
     if (validationTrigger.isDefined) { // init trigger
       validationTrigger.get.apply(state)
     }
-    // TODO: Delete
-    state("epoch") = 2
-    validate("123")
 
     NcfLogger.info("train_epoch", state[Int]("epoch") - 1)
     while (!endWhen(state)) {
