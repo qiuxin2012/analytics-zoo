@@ -41,7 +41,6 @@ object GenerateData {
   import NeuralCFexample._
 
   def main(args: Array[String]): Unit = {
-
     val defaultParams = NeuralCFParams()
 
     // run with ml-20m, please use

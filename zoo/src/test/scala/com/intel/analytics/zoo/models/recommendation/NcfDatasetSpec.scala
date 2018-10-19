@@ -4,7 +4,7 @@ import com.intel.analytics.bigdl.nn.BCECriterion
 import com.intel.analytics.bigdl.optim.{EmbeddingAdam2, NCFOptimizer2, ParallelAdam, Trigger}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.utils.{Engine, RandomGenerator, T}
-import com.intel.analytics.zoo.examples.mlperf.recommendation.{NCFDataSet, NeuralCFexample}
+import com.intel.analytics.zoo.examples.mlperf.recommendation.{NCFDataSet, NcfLogger, NeuralCFexample}
 import com.intel.analytics.zoo.pipeline.api.keras.ZooSpecHelper
 
 class NcfDatasetSpec extends ZooSpecHelper{
@@ -380,5 +380,10 @@ class NcfDatasetSpec extends ZooSpecHelper{
 
     state[Int]("epoch") should be (6)
     state[Float]("HitRatio@10") should be (0.6f)
+  }
+
+  "log" should "works fine" in {
+    NcfLogger.info("123")
+
   }
 }

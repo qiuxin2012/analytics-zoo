@@ -327,12 +327,12 @@ object EmbeddingAdam2 {
   beta1Powers(0) = 1
   val beta2Powers = new Array[Double](cap)
   beta2Powers(0) = 1
-  println("init power start")
+//  println("init power start")
   var i = 1
   while(i < cap) {
     beta1Powers(i) = beta1Powers(i - 1) * beta1
     beta2Powers(i) = beta2Powers(i - 1) * beta2
     i += 1
   }
-  println("init power done")
+//  println("init power done")
 }
