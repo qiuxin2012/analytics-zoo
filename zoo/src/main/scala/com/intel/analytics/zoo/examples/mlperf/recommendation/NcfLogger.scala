@@ -13,13 +13,13 @@ object NcfLogger {
   def info(message: String, value: Float): Unit = {
     val ste = Thread.currentThread().getStackTrace()
     println(f"$header ${System.currentTimeMillis() / 1e3}%10.3f " +
-      f"(${ste(2).getFileName}:${ste(2).getLineNumber}) $message $value")
+      f"(${ste(2).getFileName}:${ste(2).getLineNumber}) $message: $value")
   }
 
   def info(message: String, value: String): Unit = {
     val ste = Thread.currentThread().getStackTrace()
     println(f"$header ${System.currentTimeMillis() / 1e3}%10.3f " +
-      f"(${ste(2).getFileName}:${ste(2).getLineNumber}) $message: $value")
+      s"""(${ste(2).getFileName}:${ste(2).getLineNumber}) $message: "$value"""")
   }
 
   def info(message: String, value: Int): Unit = {
