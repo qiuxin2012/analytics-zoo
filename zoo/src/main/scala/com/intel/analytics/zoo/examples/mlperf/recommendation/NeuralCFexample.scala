@@ -133,7 +133,7 @@ object NeuralCFexample {
     Logger.getLogger("com").setLevel(Level.ERROR)
     Engine.init
 
-    NcfLogger.info("create_optim_method", Array(("name", "Adam"),
+    NcfLogger.info("create_optim_method", Array(("name", """"Adam""""),
       ("lr", param.learningRate.toString),
       ("beta1", param.beta1.toString),
       ("beta2", param.beta2.toString),
@@ -454,7 +454,10 @@ object NeuralCFexample {
 
   def maxEpochAndHr(maxEpoch: Int, maxHr: Float): Trigger = {
     new Trigger() {
+      protected var runStop = false
+
       override def apply(state: Table): Boolean = {
+        if (runStop) return runStop
         val hrEnd = if (state.contains("HitRatio@10")) {
           state[Float]("HitRatio@10") > maxHr
         } else {
@@ -462,12 +465,14 @@ object NeuralCFexample {
         }
         val epochEnd = state[Int]("epoch") > maxEpoch
         if (hrEnd || epochEnd) {
+          // print this log only once
           NcfLogger.info("eval_target", maxHr)
           if (hrEnd) {
-            NcfLogger.info("success", true)
+            NcfLogger.info("run_stop", Array(("success", "true")))
           } else {
-            NcfLogger.info("success", false)
+            NcfLogger.info("run_stop", Array(("success", "false")))
           }
+          runStop = true
         }
         hrEnd || epochEnd
       }
