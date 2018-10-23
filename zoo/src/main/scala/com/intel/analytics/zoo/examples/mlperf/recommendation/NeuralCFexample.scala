@@ -158,7 +158,7 @@ object NeuralCFexample {
     val (ratings, userCount, itemCount, itemMapping) = loadPublicData(param.inputDir, param.dataset)
     val (evalPos, trainSet, valSample) = GenerateData.generateTrainValSetLocal(ratings, itemCount,
         trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum, seed = param.seed)
-    val trainDataset = new NCFDataSet(trainSet.sortBy(_._1), evalPos,
+    val trainDataset = new NCFDataSet(trainSet.sortBy(_._1),
       param.trainNegtiveNum, param.batchSize, userCount, itemCount,
       seed = param.seed, processes = validateBatchSize)
     val valDataset = (DataSet.array(valSample) ->

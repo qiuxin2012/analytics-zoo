@@ -90,13 +90,11 @@ object GenerateData {
 
     val (evalPos, trainSet, valSamples) = generateTrainValSet(ratings, userCount, itemCount,
       trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
-    val ncfDataSet = new NCFDataSet(trainSet, evalPos,
+    val ncfDataSet = new NCFDataSet(trainSet,
       param.trainNegtiveNum, param.batchSize, userCount, itemCount)
     ncfDataSet.shuffle()
     val trainIterator = ncfDataSet.data(true)
     saveTrainToBinary(trainIterator, "/tmp/1234/")
-
-
 
     println()
 

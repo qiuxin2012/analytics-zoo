@@ -35,7 +35,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val userCount = 8
     val itemCount = 10
 
-    val ncfD = new NCFDataSet(trainSet, valPos,
+    val ncfD = new NCFDataSet(trainSet,
       trainNegatives, batchSize, userCount, itemCount, processes = 3)
 
     RandomGenerator.RNG.setSeed(10)
@@ -51,7 +51,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
         if (target.valueAt(i, 1) == 1) {
           Some(input.valueAt(i, 2)) should contain oneOf (userID + 1, userID + 2)
         } else {
-          Some(input.valueAt(i, 2)) should not contain oneOf (userID, userID + 1, userID + 2)
+          Some(input.valueAt(i, 2)) should not contain oneOf (userID + 1, userID + 2)
         }
       }
       count += 1
@@ -87,7 +87,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val userCount = 8
     val itemCount = 10
 
-    val ncfD = new NCFDataSet(trainSet, valPos,
+    val ncfD = new NCFDataSet(trainSet,
       trainNegatives, batchSize, userCount, itemCount, processes = 3)
 
     RandomGenerator.RNG.setSeed(10)
@@ -102,7 +102,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
         if (target.valueAt(i, 1) == 1) {
           Some(input.valueAt(i, 2)) should contain oneOf (userID + 1, userID + 2)
         } else {
-          Some(input.valueAt(i, 2)) should not contain oneOf (userID, userID + 1, userID + 2)
+          Some(input.valueAt(i, 2)) should not contain oneOf (userID + 1, userID + 2)
         }
       }
     }
@@ -119,7 +119,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
         if (target.valueAt(i, 1) == 1) {
           Some(input.valueAt(i, 2)) should contain oneOf (userID + 1, userID + 2)
         } else {
-          Some(input.valueAt(i, 2)) should not contain oneOf (userID, userID + 1, userID + 2)
+          Some(input.valueAt(i, 2)) should not contain oneOf (userID + 1, userID + 2)
         }
       }
     }
@@ -152,7 +152,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val userCount = 8
     val itemCount = 10
 
-    val ncfD = new NCFDataSet(trainSet, valPos,
+    val ncfD = new NCFDataSet(trainSet,
       trainNegatives, batchSize, userCount, itemCount, processes = 3)
     val userCounts = new Array[Int](8)
 
@@ -169,7 +169,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
         if (target.valueAt(i, 1) == 1) {
           Some(input.valueAt(i, 2)) should contain oneOf (userID + 1, userID + 2)
         } else {
-          Some(input.valueAt(i, 2)) should not contain oneOf (userID, userID + 1, userID + 2)
+          Some(input.valueAt(i, 2)) should not contain oneOf (userID + 1, userID + 2)
         }
       }
     }
@@ -187,7 +187,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
         if (target.valueAt(i, 1) == 1) {
           Some(input.valueAt(i, 2)) should contain oneOf (userID + 1, userID + 2)
         } else {
-          Some(input.valueAt(i, 2)) should not contain oneOf (userID, userID + 1, userID + 2)
+          Some(input.valueAt(i, 2)) should not contain oneOf (userID + 1, userID + 2)
         }
       }
     }
@@ -222,7 +222,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val userCount = 8
     val itemCount = 10
 
-    val ncfD = new NCFDataSet(trainSet, valPos,
+    val ncfD = new NCFDataSet(trainSet,
       trainNegatives, batchSize, userCount, itemCount, processes = 3)
 
     ncfD.shuffle()
@@ -260,12 +260,12 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val userCount = 8
     val itemCount = 10
 
-    val ncfD = new NCFDataSet(trainSet, valPos,
+    val ncfD = new NCFDataSet(trainSet,
       trainNegatives, batchSize, userCount, itemCount, processes = 3)
     ncfD.shuffle()
     ncfD.shuffle()
     val tensor1 = Tensor(ncfD.inputBuffer, Array(64, 2))
-    val ncfD2 = new NCFDataSet(trainSet, valPos,
+    val ncfD2 = new NCFDataSet(trainSet,
       trainNegatives, batchSize, userCount, itemCount, processes = 3)
     ncfD2.shuffle()
     val tensor2 = Tensor(ncfD2.inputBuffer, Array(64, 2))
@@ -305,7 +305,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val numFactors = 8
     val learningRate = 1e-3
 
-    val trainDataset = new NCFDataSet(trainSet, valPos,
+    val trainDataset = new NCFDataSet(trainSet,
       trainNegatives, batchSize, userCount, itemCount, processes = 3)
     trainDataset.shuffle()
 
