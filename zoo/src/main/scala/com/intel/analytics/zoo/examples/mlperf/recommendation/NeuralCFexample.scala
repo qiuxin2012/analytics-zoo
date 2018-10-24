@@ -509,7 +509,7 @@ class HitRate[T: ClassTag](k: Int = 10, negNum: Int = 100)(
     var i = 1
     val precision = ev.toType[Float](o.valueAt(index))
     while (i < o.nElement() && topK <= k) {
-      if (ev.toType[Float](o.valueAt(i)) > precision) {
+      if (ev.toType[Float](o.valueAt(i)) >= precision) {
         topK += 1
       }
       i += 1
@@ -552,7 +552,7 @@ class Ndcg[T: ClassTag](k: Int = 10, negNum: Int = 100)(
     var i = 1
     val precision = ev.toType[Float](o.valueAt(index))
     while (i < o.nElement() && ranking <= k) {
-      if (ev.toType[Float](o.valueAt(i)) > precision) {
+      if (ev.toType[Float](o.valueAt(i)) >= precision) {
         ranking += 1
       }
       i += 1
