@@ -41,6 +41,7 @@ import scala.io.Source
 import scala.util.{Random, Sorting}
 
 object GenerateData {
+  val logger = Logger.getLogger(this.getClass)
 //  import com.intel.analytics.zoo.examples.mlperf.recommendation.NeuralCFexample._
 //
 //  def main(args: Array[String]): Unit = {
@@ -181,20 +182,44 @@ object GenerateData {
     groupedRatings.foreach(x => Sorting.quickSort(x._2))
     val groupUserAndItems = groupedRatings.map(x => (x._1, x._2.map(_.itemId)))
 
-    val evalPos = groupUserAndItems.filter(_._2.length >= 20).map {x =>
+    // test ratings of bigdl
+    val evalPosBigDL = groupUserAndItems.filter(_._2.length >= 20).map {x =>
       val rows = x._2
       val last = rows.last
       x._1 -> last
     }
+    /*
+     Notice: This test-rating.csv comes from reference pytorch code.
+     A lot of user's latest item has the same timestamp, and quicksort using in reference code is
+     an unstable sort, so it's very hard to generate the same test-ratings. And we found pytorch's
+     test-ratings is much better than ours. So we use just load pytorch's test-ratings and discard
+     BigDL's test-rating(evalPosBigDL).
+
+     As our item mapping is different, we use add "original_items.sort(axis=0)" to reference convert.py
+     (after "original_items = df[ITEM_COLUMN].unique()") to get the same item mapping with BigDL.
+     Then get this test-ratings.csv.
+    */
+    val evalPos = Source.fromFile("test-ratings.csv").getLines()
+      .map{line =>
+        val pos = line.split("\t")
+        val userId = pos(0).toInt + 1
+        val posItem = pos(1).toInt + 1
+        (userId, posItem)
+      }.toMap
+    var count = 0
+    (1 to evalPos.size).foreach{userId =>
+      if (evalPos(userId) != evalPosBigDL(userId)) {
+        count += 1
+      }
+    }
+    logger.info(s"Compared with pytorch's test-ratings.csv, eval positive is different $count of ${evalPos.size}, " +
+      s"so we use pytorch's test-rating.csv")
 
     val trainSet = groupUserAndItems.map { x =>
       val rows = x._2
-      val last = rows.last
-      if (rows.length >= 20) {
-        x._1 -> rows.take(rows.length - 1).toSet
-      } else {
-        x._1 -> rows.toSet
-      }
+      val items = rows.filter(evalPos(x._1) != _).toSet
+      assert(items.size == rows.size - 1)
+      x._1 -> items
     }
 
     val negsResult = groupUserAndItems.map { x =>

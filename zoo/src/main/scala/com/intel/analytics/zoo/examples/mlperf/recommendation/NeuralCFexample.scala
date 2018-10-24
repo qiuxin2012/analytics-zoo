@@ -156,8 +156,10 @@ object NeuralCFexample {
     val hiddenLayers = param.layers.split(",").map(_.toInt)
 
     val (ratings, userCount, itemCount, itemMapping) = loadPublicData(param.inputDir, param.dataset)
+
+    // TODO: As reference pytorch code doesn't pass seed to generate test negative, we don't either.
     val (evalPos, trainSet, valSample) = GenerateData.generateTrainValSetLocal(ratings, itemCount,
-        trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum, seed = param.seed)
+        trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
     val trainDataset = new NCFDataSet(trainSet.sortBy(_._1),
       param.trainNegtiveNum, param.batchSize, userCount, itemCount,
       seed = param.seed, processes = validateBatchSize)
