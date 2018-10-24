@@ -21,6 +21,7 @@ import java.util
 
 import com.intel.analytics.bigdl._
 import com.intel.analytics.bigdl.dataset.{DataSet, MiniBatch, Sample, SampleToMiniBatch}
+import com.intel.analytics.bigdl.examples.mlperf.recommendation.{GenerateData, NCFDataSet}
 import com.intel.analytics.bigdl.nn.abstractnn.Activity
 import com.intel.analytics.bigdl.nn.{BCECriterion, ClassNLLCriterion}
 import com.intel.analytics.bigdl.numeric.NumericFloat
@@ -130,7 +131,6 @@ object NeuralCFexample {
   def run(param: NeuralCFParams): Unit = {
     NcfLogger.info("seed", param.seed)
     Logger.getLogger("org").setLevel(Level.ERROR)
-    Logger.getLogger("com").setLevel(Level.ERROR)
     Engine.init
 
     NcfLogger.info("create_optim_method", Array(("name", """"Adam""""),
@@ -164,6 +164,10 @@ object NeuralCFexample {
     val valDataset = (DataSet.array(valSample) ->
       SampleToMiniBatch[Float](validateBatchSize)).toLocal()
 
+//    val valDataset = (DataSet.array[Sample[Float]](loadPytorchTest("test-ratings.csv",
+//      "test-negative.csv")) -> SampleToMiniBatch[Float](validateBatchSize)).toLocal()
+//    val trainDataset = (DataSet.array[MiniBatch[Float]](loadPytorchTrain("0.txt", param.batchSize))).toLocal()
+
     RandomGenerator.RNG.setSeed(param.seed)
     val ncf = NeuralCFV2[Float](
       userCount = userCount,
@@ -184,12 +188,33 @@ object NeuralCFexample {
 
     optimizer
       .setOptimMethods(optimMethod)
-        .setValidation(Trigger.everyEpoch, valDataset,
+      .setValidation(Trigger.everyEpoch, valDataset,
           Array(new HitRate[Float](negNum = param.valNegtiveNum)))
     val endTrigger = maxEpochAndHr(param.nEpochs, param.threshold)
     optimizer
       .setEndWhen(endTrigger)
       .optimize()
+
+//    val endTrigger = Trigger.maxEpoch(1)
+//    optimizer
+//      .setEndWhen(endTrigger)
+//      .optimize()
+//    var e = 2
+//    while(e <= param.nEpochs) {
+//      println(s"Starting epoch $e/${param.nEpochs}")
+//      val endTrigger = Trigger.maxEpoch(e)
+//      val newTrainDataset = (DataSet.array[MiniBatch[Float]](
+//        loadPytorchTrain(s"${e - 1}.txt", param.batchSize))).toLocal()
+//
+//      optimizer
+//        .setTrainData(newTrainDataset)
+//        .setEndWhen(endTrigger)
+//        .optimize()
+//
+//      e += 1
+//    }
+
+
     NcfLogger.info("run_final")
     System.exit(0)
   }

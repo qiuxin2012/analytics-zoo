@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.intel.analytics.zoo.examples.mlperf.recommendation
+package com.intel.analytics.bigdl.examples.mlperf.recommendation
 
 import java.io.{DataOutputStream, FileOutputStream}
 import java.nio.ByteBuffer
@@ -22,9 +22,12 @@ import java.util
 
 import com.intel.analytics.bigdl._
 import com.intel.analytics.bigdl.dataset.{MiniBatch, Sample}
+import com.intel.analytics.bigdl.examples.mlperf.recommendation.NCFDataSet
 import com.intel.analytics.bigdl.numeric.NumericFloat
 import com.intel.analytics.bigdl.tensor.Tensor
+import com.intel.analytics.bigdl.utils.RandomGenerator
 import com.intel.analytics.zoo.common.NNContext
+import com.intel.analytics.zoo.examples.mlperf.recommendation.NeuralCFexample.Row
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, SQLContext}
@@ -38,67 +41,67 @@ import scala.io.Source
 import scala.util.{Random, Sorting}
 
 object GenerateData {
-  import NeuralCFexample._
-
-  def main(args: Array[String]): Unit = {
-    val defaultParams = NeuralCFParams()
-
-    // run with ml-20m, please use
-    val parser = new OptionParser[NeuralCFParams]("NCF Example") {
-      opt[String]("inputDir")
-        .text(s"inputDir")
-        .action((x, c) => c.copy(inputDir = x))
-      opt[String]("dataset")
-        .text(s"dataset, ml-20m or ml-1m, default is ml-1m")
-        .action((x, c) => c.copy(dataset = x))
-      opt[Int]('b', "batchSize")
-        .text(s"batchSize")
-        .action((x, c) => c.copy(batchSize = x))
-      opt[Int]('e', "nEpochs")
-        .text("epoch numbers")
-        .action((x, c) => c.copy(nEpochs = x))
-      opt[Int]("trainNeg")
-        .text("The Number of negative instances to pair with a positive train instance.")
-        .action((x, c) => c.copy(trainNegtiveNum = x))
-      opt[Int]("valNeg")
-        .text("The Number of negative instances to pair with a positive validation instance.")
-        .action((x, c) => c.copy(valNegtiveNum = x))
-    }
-
-    parser.parse(args, defaultParams).map {
-      params =>
-        run(params)
-    } getOrElse {
-      System.exit(1)
-    }
-  }
-
-  def run(param: NeuralCFParams): Unit = {
-    Logger.getLogger("org").setLevel(Level.ERROR)
-    val conf = new SparkConf()
-    conf.setAppName("NCFExample").set("spark.sql.crossJoin.enabled", "true")
-      .set("spark.driver.maxResultSize", "2048")
-    val sc = NNContext.initNNContext(conf)
-    val sqlContext = SQLContext.getOrCreate(sc)
-
-    val inputDir = param.inputDir
-
-    val (ratings, userCount, itemCount, itemMapping) =
-      loadPublicData(sqlContext, param.inputDir, param.dataset)
-    ratings.cache()
-    println(s"${userCount} ${itemCount}")
-
-    val (evalPos, trainSet, valSamples) = generateTrainValSet(ratings, userCount, itemCount,
-      trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
-    val ncfDataSet = new NCFDataSet(trainSet,
-      param.trainNegtiveNum, param.batchSize, userCount, itemCount)
-    ncfDataSet.shuffle()
-    val trainIterator = ncfDataSet.data(true)
-    saveTrainToBinary(trainIterator, "/tmp/1234/")
-
-    println()
-
-  }
+//  import com.intel.analytics.zoo.examples.mlperf.recommendation.NeuralCFexample._
+//
+//  def main(args: Array[String]): Unit = {
+//    val defaultParams = NeuralCFParams()
+//
+//    // run with ml-20m, please use
+//    val parser = new OptionParser[NeuralCFParams]("NCF Example") {
+//      opt[String]("inputDir")
+//        .text(s"inputDir")
+//        .action((x, c) => c.copy(inputDir = x))
+//      opt[String]("dataset")
+//        .text(s"dataset, ml-20m or ml-1m, default is ml-1m")
+//        .action((x, c) => c.copy(dataset = x))
+//      opt[Int]('b', "batchSize")
+//        .text(s"batchSize")
+//        .action((x, c) => c.copy(batchSize = x))
+//      opt[Int]('e', "nEpochs")
+//        .text("epoch numbers")
+//        .action((x, c) => c.copy(nEpochs = x))
+//      opt[Int]("trainNeg")
+//        .text("The Number of negative instances to pair with a positive train instance.")
+//        .action((x, c) => c.copy(trainNegtiveNum = x))
+//      opt[Int]("valNeg")
+//        .text("The Number of negative instances to pair with a positive validation instance.")
+//        .action((x, c) => c.copy(valNegtiveNum = x))
+//    }
+//
+//    parser.parse(args, defaultParams).map {
+//      params =>
+//        run(params)
+//    } getOrElse {
+//      System.exit(1)
+//    }
+//  }
+//
+//  def run(param: NeuralCFParams): Unit = {
+//    Logger.getLogger("org").setLevel(Level.ERROR)
+//    val conf = new SparkConf()
+//    conf.setAppName("NCFExample").set("spark.sql.crossJoin.enabled", "true")
+//      .set("spark.driver.maxResultSize", "2048")
+//    val sc = NNContext.initNNContext(conf)
+//    val sqlContext = SQLContext.getOrCreate(sc)
+//
+//    val inputDir = param.inputDir
+//
+//    val (ratings, userCount, itemCount, itemMapping) =
+//      loadPublicData(sqlContext, param.inputDir, param.dataset)
+//    ratings.cache()
+//    println(s"${userCount} ${itemCount}")
+//
+//    val (evalPos, trainSet, valSamples) = generateTrainValSet(ratings, userCount, itemCount,
+//      trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
+//    val ncfDataSet = new NCFDataSet(trainSet,
+//      param.trainNegtiveNum, param.batchSize, userCount, itemCount)
+//    ncfDataSet.shuffle()
+//    val trainIterator = ncfDataSet.data(true)
+//    saveTrainToBinary(trainIterator, "/tmp/1234/")
+//
+//    println()
+//
+//  }
 
   def generateTrainValSet(
         rating: DataFrame,
@@ -198,12 +201,12 @@ object GenerateData {
       val key = x._1
       val items = x._2.toSet
 
-      val gen = new Random(key + seed)
+      val gen = new RandomGenerator().setSeed(key + seed)
       val negs = new Array[Int](valNegNum)
 
       var i = 0
       while(i < valNegNum) {
-        val negItem = gen.nextInt(itemCount) + 1
+        val negItem = math.floor(gen.uniform(0, itemCount)).toInt + 1
         if (!items.contains(negItem)) {
           negs(i) = negItem
           i += 1

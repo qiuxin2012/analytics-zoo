@@ -1,4 +1,4 @@
-package com.intel.analytics.zoo.examples.mlperf.recommendation
+package com.intel.analytics.bigdl.examples.mlperf.recommendation
 
 import java.util
 import java.util.concurrent.{Executors, ThreadFactory}
@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import com.intel.analytics.bigdl.dataset.{LocalDataSet, MiniBatch}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.utils.{Engine, RandomGenerator}
+import com.intel.analytics.zoo.examples.mlperf.recommendation.NcfLogger
 
 import scala.collection.parallel.ParSeq
 import scala.concurrent.duration.Duration
@@ -45,7 +46,8 @@ class NCFDataSet (
       trainSize * trainNegatives * 2, trainSize * 2)
     util.Arrays.fill(labelBuffer, 0, trainSize * trainNegatives, 0)
     util.Arrays.fill(labelBuffer, trainSize * trainNegatives, trainSize * (1 + trainNegatives), 1)
-    NCFDataSet.shuffle(inputBuffer, labelBuffer, seed, processes)
+    // NCFDataSet.shuffle(inputBuffer, labelBuffer, seed, processes)
+    NCFDataSet.shuffle(inputBuffer, labelBuffer, seed)
     seed += processes
   }
 
@@ -115,6 +117,28 @@ object NCFDataSet {
 
   def shuffle(inputBuffer: Array[Float],
               labelBuffer: Array[Float],
+              seed: Int): Unit = {
+    val rand = new Random(seed)
+    var i = 0
+    val length = inputBuffer.length / 2
+    while (i < length) {
+      val exchange = rand.nextInt(length - i) + i
+      val tmp1 = inputBuffer(exchange * 2)
+      val tmp2 = inputBuffer(exchange * 2 + 1)
+      inputBuffer(exchange * 2) = inputBuffer(i * 2)
+      inputBuffer(exchange * 2 + 1) = inputBuffer(i * 2 + 1)
+      inputBuffer(2 * i) = tmp1
+      inputBuffer(2 * i + 1) = tmp2
+
+      val labelTmp = labelBuffer(exchange)
+      labelBuffer(exchange) = labelBuffer(i)
+      labelBuffer(i) = labelTmp
+      i += 1
+    }
+  }
+
+  def shuffle(inputBuffer: Array[Float],
+              labelBuffer: Array[Float],
               seed: Int,
               parallelism: Int): Unit = {
     val length = inputBuffer.length / 2
@@ -162,7 +186,7 @@ object NCFDataSet {
   def generateTasks(trainSet: Seq[(Int, Set[Int])],
                             trainNeg: Int,
                             processes: Int,
-                            seed: Int): ParSeq[(Int, Int, Int, Random)] = {
+                            seed: Int): ParSeq[(Int, Int, Int, RandomGenerator)] = {
     val size = Math.ceil(trainSet.size / processes).toInt
     val lastOffset = size * (processes - 1)
     val processesOffset = Array.tabulate[Int](processes)(_ * size)
@@ -184,7 +208,7 @@ object NCFDataSet {
 
     val numItemAndOffset = (0 until processes).map{p =>
       (tasks(p)._1, tasks(p)._2,
-        tasks.slice(0, p).map(_._3).sum * trainNeg, new Random(p + seed))
+        tasks.slice(0, p).map(_._3).sum * trainNeg, new RandomGenerator().setSeed(p + seed))
     }.par
 
     numItemAndOffset
@@ -192,7 +216,7 @@ object NCFDataSet {
 
   def generateNegativeItems(trainSet: Seq[(Int, Set[Int])],
                             buffer: Array[Float],
-                            tasks: ParSeq[(Int, Int, Int, Random)],
+                            tasks: ParSeq[(Int, Int, Int, RandomGenerator)],
                             trainNeg: Int,
                             itemCount: Int): Unit = {
 
@@ -207,9 +231,9 @@ object NCFDataSet {
         val items = trainSet(userStart)._2
         var i = 0
         while (i < items.size * trainNeg) {
-          var negItem = rand.nextInt(itemCount) + 1
+          var negItem = Math.floor(rand.uniform(0, itemCount)).toInt + 1
           while (items.contains(negItem)) {
-            negItem = rand.nextInt(itemCount) + 1
+            negItem = Math.floor(rand.uniform(0, itemCount)).toInt + 1
           }
           val negItemOffset = bufferOffset * 2
           buffer(negItemOffset) = userId

@@ -1,11 +1,14 @@
 package com.intel.analytics.zoo.models.recommendation
 
+import com.intel.analytics.bigdl.examples.mlperf.recommendation.NCFDataSet
 import com.intel.analytics.bigdl.nn.BCECriterion
 import com.intel.analytics.bigdl.optim.{EmbeddingAdam2, NCFOptimizer2, ParallelAdam, Trigger}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.utils.{Engine, RandomGenerator, T}
-import com.intel.analytics.zoo.examples.mlperf.recommendation.{NCFDataSet, NcfLogger, NeuralCFexample}
+import com.intel.analytics.zoo.examples.mlperf.recommendation.{NcfLogger, NeuralCFexample}
 import com.intel.analytics.zoo.pipeline.api.keras.ZooSpecHelper
+
+import scala.io.Source
 
 class NcfDatasetSpec extends ZooSpecHelper{
   "dataset" should "generate right result" in {
@@ -384,6 +387,34 @@ class NcfDatasetSpec extends ZooSpecHelper{
 
   "log" should "works fine" in {
     NcfLogger.info("123")
+
+  }
+
+  "generate" should "works" in {
+    val posFile = "/home/xin/datasets/ncf/test-ratings.csv"
+    val trainFile = "/home/xin/datasets/ncf/0.txt"
+    val testPositives = Source.fromFile(posFile).getLines()
+      .map{line =>
+        val pos = line.split("\t")
+        val userId = pos(0).toInt
+        val posItem = pos(1).toInt
+        (userId, posItem)
+      }.toMap
+
+    var i = 0
+    val trainData = Source.fromFile(trainFile).getLines()
+      .foreach{line =>
+        val pos = line.split(",")
+        val userId = pos(0).toInt
+        val item = pos(1).toInt
+        val label = pos(2).toInt
+        if (label == 0 && testPositives(userId) == item) {
+          println(s"userId: $userId, itemId $item")
+          i += 1
+        }
+      }
+
+    println(i)
 
   }
 }
