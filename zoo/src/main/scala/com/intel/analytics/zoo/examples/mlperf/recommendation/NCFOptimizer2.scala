@@ -168,9 +168,6 @@ class NCFOptimizer2[T: ClassTag](
           })
       ).sum
 
-      logger.info(s"Max model time is ${modelTimeArray.max}," +
-        s"Time is ${modelTimeArray.sortWith((a, b) => a > b).mkString("\t")} ms")
-
       val loss = lossSum / parallelism
 
       val computingTime = System.nanoTime()
@@ -237,14 +234,28 @@ class NCFOptimizer2[T: ClassTag](
         s"aggregate linear is ${(aggTime - computingTime2) / 1e9}s " +
         s"update linear time is ${(updateWeightTime1 - aggTime) / 1e9}s " +
         s"update embedding time is ${(updateWeightTime2 - updateWeightTime1) / 1e9}s")*/
+      val head = header(state[Int]("epoch"), count, numSamples, state[Int]("neval"), wallClockTime)
+      logger.info(s"$head " +
+        s"loss is $loss, training cost ${(wallClockTime - state[Long]("trainingTime")) / 1e9}s. " +
+        s"Throughput is ${count * 1e9 / (wallClockTime - state[Long]("trainingTime"))} record / second. ")
 
       state("neval") = state[Int]("neval") + 1
 
+//      val userC = 8
+//      val itemC = 10
+//      val userIds = Tensor(userC).range(1, userC)
+//      val itemIds = Tensor(itemC).range(1, itemC)
+//      val userItem = Tensor(itemC, 2).fill(ev.one)
+//      userItem.select(2, 1).narrow(1, 1, userC).copy(userIds)
+//      userItem.select(2, 2).copy(itemIds)
+//      embeddingOptim.updateWeight(userItem, embeddingWeight)
       if (count >= numSamples) {
-        val head = header(state[Int]("epoch"), count, numSamples, state[Int]("neval"), wallClockTime)
-        logger.info(s"$head " +
-          s"loss is $loss, training cost ${(wallClockTime - state[Long]("trainingTime")) / 1e9}s. " +
-          s"Throughput is ${count * 1e9 / (wallClockTime - state[Long]("trainingTime"))} record / second. ")
+//        val a = Tensor(128).range(1, 128)
+//        val b = Tensor(100).range(1, 100)
+//        val c = Tensor(128, 2).fill(ev.one)
+//        c.select(2, 1).copy(a)
+//        c.select(2, 2).narrow(1, 1, 100).copy(b)
+
         state("trainingTime") = wallClockTime
         state("epoch") = state[Int]("epoch") + 1
         validate(head)

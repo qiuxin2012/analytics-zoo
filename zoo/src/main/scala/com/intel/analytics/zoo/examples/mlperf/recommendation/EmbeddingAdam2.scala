@@ -305,6 +305,9 @@ object EmbeddingAdam2 {
           _s.mul(ev.fromType(beta1t))
           _r.mul(ev.fromType(beta2t))
         }
+        if (timestamps != null) {
+          timestamps(id) = timestamp
+        }
       }
     }
   }
