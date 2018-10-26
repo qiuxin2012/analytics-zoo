@@ -191,9 +191,8 @@ object GenerateData {
     /*
      Notice: This test-rating.csv comes from reference pytorch code.
      A lot of user's latest item has the same timestamp, and quicksort using in reference code is
-     an unstable sort, so it's very hard to generate the same test-ratings. And we found pytorch's
-     test-ratings is much better than ours. So we use just load pytorch's test-ratings and discard
-     BigDL's test-rating(evalPosBigDL).
+     an unstable sort, so it's very hard to generate the same test-ratings. To stay the same with
+     reference, we will load pytorch's test-ratings to instead BigDL's test-ratings.
 
      As our item mapping is different, we use add "original_items.sort(axis=0)" to reference convert.py
      (after "original_items = df[ITEM_COLUMN].unique()") to get the same item mapping with BigDL.
@@ -213,7 +212,7 @@ object GenerateData {
       }
     }
     logger.info(s"Compared with pytorch's test-ratings.csv, eval positive is different $count of ${evalPos.size}, " +
-      s"so we use pytorch's test-rating.csv")
+      s"so we use pytorch's test-rating.csv to stay the same with pytorch's test positive.")
 
     val trainSet = groupUserAndItems.map { x =>
       val rows = x._2

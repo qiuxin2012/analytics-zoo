@@ -320,7 +320,6 @@ object NeuralCFexample {
   def loadPublicData(dataPath: String, dataset: String): (Array[Row], Int, Int, Map[Int, Int]) = {
     val start = System.nanoTime()
     var userCount = 0
-    val uniqueMovies = scala.collection.mutable.Set[Int]()
 
     val path = new File(dataPath, "/ratings.csv").getAbsolutePath
     val bufferedSource = scala.io.Source.fromFile(path)
@@ -330,17 +329,15 @@ object NeuralCFexample {
       val itemId = row(1).toInt
 
       if (userId > userCount) userCount = userId
-      uniqueMovies.add(itemId)
 
       Row(userId, itemId, row(2).toFloat, row(3).toLong)
     }.toArray.par
     bufferedSource.close
 
-    val sortedUniqueMovies = uniqueMovies.toArray
-    Sorting.quickSort(sortedUniqueMovies)
-    val length = sortedUniqueMovies.length
+    val uniqueMovies = rows.toArray.map(_.itemId).distinct
+    val length = uniqueMovies.length
 
-    val mapping = sortedUniqueMovies.zip(1 to sortedUniqueMovies.length).toMap
+    val mapping = uniqueMovies.zip(1 to uniqueMovies.length).toMap
     val parMapping = mapping.par
     val ratings = rows.map { row =>
       Row(row.userId, parMapping(row.itemId), row.label, row.timeStamp)
@@ -536,7 +533,7 @@ class HitRate[T: ClassTag](k: Int = 10, negNum: Int = 100)(
     var i = 1
     val precision = ev.toType[Float](o.valueAt(index))
     while (i < o.nElement() && topK <= k) {
-      if (ev.toType[Float](o.valueAt(i)) >= precision) {
+      if (ev.toType[Float](o.valueAt(i)) > precision) {
         topK += 1
       }
       i += 1
@@ -579,7 +576,7 @@ class Ndcg[T: ClassTag](k: Int = 10, negNum: Int = 100)(
     var i = 1
     val precision = ev.toType[Float](o.valueAt(index))
     while (i < o.nElement() && ranking <= k) {
-      if (ev.toType[Float](o.valueAt(i)) >= precision) {
+      if (ev.toType[Float](o.valueAt(i)) > precision) {
         ranking += 1
       }
       i += 1

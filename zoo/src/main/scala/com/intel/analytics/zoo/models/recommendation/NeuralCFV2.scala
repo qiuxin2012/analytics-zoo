@@ -124,7 +124,7 @@ class NeuralCFV2[T: ClassTag] private(val userCount: Int,
     val stdv = math.sqrt(3.toDouble / hiddenLayers.last)
     val finalLinear = Linear(mfEmbed + hiddenLayers.last, numClasses)
         .setName(s"fc${mfEmbed + hiddenLayers.last}->$numClasses")
-      .setInitMethod(RandomUniform(-stdv, stdv))
+      .setInitMethod(Xavier.setVarianceNormAverage(false))
       .inputs(merge)
     val sigmoid = Sigmoid().inputs(finalLinear)
 
