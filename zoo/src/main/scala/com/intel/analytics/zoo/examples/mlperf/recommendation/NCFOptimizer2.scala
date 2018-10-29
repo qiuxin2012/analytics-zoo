@@ -139,10 +139,10 @@ class NCFOptimizer2[T: ClassTag](
         miniBatchBuffer(b) = batch.slice(offset, length)
         b += 1
       }
-      val dataFetchTime = System.nanoTime()
+//      val dataFetchTime = System.nanoTime()
       embeddingOptim.updateWeight(batch.getInput().asInstanceOf[Tensor[T]], embeddingWeight)
       // println("dataFetch")
-      val modelTimeArray = new Array[Long](parallelism)
+//      val modelTimeArray = new Array[Long](parallelism)
       val lossSum = Engine.default.invokeAndWait(
         (0 until parallelism).map(i =>
           () => {
@@ -163,18 +163,15 @@ class NCFOptimizer2[T: ClassTag](
             val errors = localCriterion.backward(output, target)
             localEmbedding.updateGradInput(input,
               localLinears.backward(localEmbedding.output, errors))
-            modelTimeArray(i) = System.nanoTime() - start
+//            modelTimeArray(i) = System.nanoTime() - start
             _loss
           })
       ).sum
 
-      logger.info(s"Max model time is ${modelTimeArray.max}," +
-        s"Time is ${modelTimeArray.sortWith((a, b) => a > b).mkString("\t")} ms")
-
       val loss = lossSum / parallelism
 
-      val computingTime = System.nanoTime()
-      val zeroGradTime = System.nanoTime()
+//      val computingTime = System.nanoTime()
+//      val zeroGradTime = System.nanoTime()
 
 
       (0 until parallelism).toArray.foreach { i =>
@@ -188,7 +185,7 @@ class NCFOptimizer2[T: ClassTag](
         embeddingOptim.gradients(3)(i) = (input2, localLinears.gradInput.toTable[Tensor[T]](4))
       }
 
-      val computingTime2 = System.nanoTime()
+//      val computingTime2 = System.nanoTime()
 
 
       // copy multi-model gradient to the buffer
@@ -212,20 +209,20 @@ class NCFOptimizer2[T: ClassTag](
       )
       linearsGrad.div(ev.fromType(parallelism))
 
-      val aggTime = System.nanoTime()
+//      val aggTime = System.nanoTime()
       //println("agg")
 
       optimMethod.state.update("epoch", state.get("epoch"))
       optimMethod.state.update("neval", state.get("neval"))
       optimMethod.optimize(_ => (ev.fromType(loss), linearsGrad), linearsWeight)
 
-      val updateWeightTime1 = System.nanoTime()
+//      val updateWeightTime1 = System.nanoTime()
 
       embeddingOptim.state.update("epoch", state.get("epoch"))
       embeddingOptim.state.update("neval", state.get("neval"))
       embeddingOptim.optimize(_ => (ev.fromType(loss), null), embeddingWeight)
 
-      val updateWeightTime2 = System.nanoTime()
+//      val updateWeightTime2 = System.nanoTime()
       // println("update weight")
       val end = System.nanoTime()
       wallClockTime += end - start

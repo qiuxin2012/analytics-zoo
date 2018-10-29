@@ -21,6 +21,7 @@ import java.util
 
 import com.intel.analytics.bigdl._
 import com.intel.analytics.bigdl.dataset.{DataSet, MiniBatch, Sample, SampleToMiniBatch}
+import com.intel.analytics.bigdl.examples.mlperf.recommendation.{GenerateData, NCFDataSet}
 import com.intel.analytics.bigdl.nn.abstractnn.Activity
 import com.intel.analytics.bigdl.nn.{BCECriterion, ClassNLLCriterion}
 import com.intel.analytics.bigdl.numeric.NumericFloat
@@ -130,7 +131,6 @@ object NeuralCFexample {
   def run(param: NeuralCFParams): Unit = {
     NcfLogger.info("seed", param.seed)
     Logger.getLogger("org").setLevel(Level.ERROR)
-    Logger.getLogger("com").setLevel(Level.ERROR)
     Engine.init
 
     NcfLogger.info("create_optim_method", Array(("name", """"Adam""""),
@@ -151,18 +151,31 @@ object NeuralCFexample {
         beta1 = param.beta1,
         beta2 = param.beta2,
         Epsilon = param.eps))
+//    val optimMethod = new ParallelAdam[Float](
+//        learningRate = param.learningRate,
+//        learningRateDecay = param.learningRateDecay,
+//        beta1 = param.beta1,
+//        beta2 = param.beta2,
+//        Epsilon = param.eps)
+//    val validateBatchSize = optimMethod.parallelNum
     val validateBatchSize = optimMethod("linears").asInstanceOf[ParallelAdam[Float]].parallelNum
 
     val hiddenLayers = param.layers.split(",").map(_.toInt)
 
     val (ratings, userCount, itemCount, itemMapping) = loadPublicData(param.inputDir, param.dataset)
+
+    // TODO: As reference pytorch code doesn't pass seed to generate test negative, we don't either.
     val (evalPos, trainSet, valSample) = GenerateData.generateTrainValSetLocal(ratings, itemCount,
-        trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum, seed = param.seed)
-    val trainDataset = new NCFDataSet(trainSet.sortBy(_._1), evalPos,
+        trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
+    val trainDataset = new NCFDataSet(trainSet.sortBy(_._1),
       param.trainNegtiveNum, param.batchSize, userCount, itemCount,
       seed = param.seed, processes = validateBatchSize)
     val valDataset = (DataSet.array(valSample) ->
       SampleToMiniBatch[Float](validateBatchSize)).toLocal()
+
+//    val valDataset = (DataSet.array[Sample[Float]](loadPytorchTest("test-ratings.csv",
+//      "test-negative.csv")) -> SampleToMiniBatch[Float](validateBatchSize)).toLocal()
+//    val trainDataset = (DataSet.array[MiniBatch[Float]](loadPytorchTrain("0.txt", param.batchSize))).toLocal()
 
     RandomGenerator.RNG.setSeed(param.seed)
     val ncf = NeuralCFV2[Float](
@@ -184,12 +197,33 @@ object NeuralCFexample {
 
     optimizer
       .setOptimMethods(optimMethod)
-        .setValidation(Trigger.everyEpoch, valDataset,
+      .setValidation(Trigger.everyEpoch, valDataset,
           Array(new HitRate[Float](negNum = param.valNegtiveNum)))
     val endTrigger = maxEpochAndHr(param.nEpochs, param.threshold)
     optimizer
       .setEndWhen(endTrigger)
       .optimize()
+
+//    val endTrigger = Trigger.maxEpoch(1)
+//    optimizer
+//      .setEndWhen(endTrigger)
+//      .optimize()
+//    var e = 2
+//    while(e <= param.nEpochs) {
+//      println(s"Starting epoch $e/${param.nEpochs}")
+//      val endTrigger = Trigger.maxEpoch(e)
+//      val newTrainDataset = (DataSet.array[MiniBatch[Float]](
+//        loadPytorchTrain(s"${e - 1}.txt", param.batchSize))).toLocal()
+//
+//      optimizer
+//        .setTrainData(newTrainDataset)
+//        .setEndWhen(endTrigger)
+//        .optimize()
+//
+//      e += 1
+//    }
+
+
     NcfLogger.info("run_final")
     System.exit(0)
   }
@@ -293,7 +327,6 @@ object NeuralCFexample {
   def loadPublicData(dataPath: String, dataset: String): (Array[Row], Int, Int, Map[Int, Int]) = {
     val start = System.nanoTime()
     var userCount = 0
-    val uniqueMovies = scala.collection.mutable.Set[Int]()
 
     val path = new File(dataPath, "/ratings.csv").getAbsolutePath
     val bufferedSource = scala.io.Source.fromFile(path)
@@ -303,17 +336,15 @@ object NeuralCFexample {
       val itemId = row(1).toInt
 
       if (userId > userCount) userCount = userId
-      uniqueMovies.add(itemId)
 
       Row(userId, itemId, row(2).toFloat, row(3).toLong)
     }.toArray.par
     bufferedSource.close
 
-    val sortedUniqueMovies = uniqueMovies.toArray
-    Sorting.quickSort(sortedUniqueMovies)
-    val length = sortedUniqueMovies.length
+    val uniqueMovies = rows.toArray.map(_.itemId).distinct
+    val length = uniqueMovies.length
 
-    val mapping = sortedUniqueMovies.zip(1 to sortedUniqueMovies.length).toMap
+    val mapping = uniqueMovies.zip(1 to uniqueMovies.length).toMap
     val parMapping = mapping.par
     val ratings = rows.map { row =>
       Row(row.userId, parMapping(row.itemId), row.label, row.timeStamp)
@@ -509,7 +540,7 @@ class HitRate[T: ClassTag](k: Int = 10, negNum: Int = 100)(
     var i = 1
     val precision = ev.toType[Float](o.valueAt(index))
     while (i < o.nElement() && topK <= k) {
-      if (ev.toType[Float](o.valueAt(i)) >= precision) {
+      if (ev.toType[Float](o.valueAt(i)) > precision) {
         topK += 1
       }
       i += 1
@@ -552,7 +583,7 @@ class Ndcg[T: ClassTag](k: Int = 10, negNum: Int = 100)(
     var i = 1
     val precision = ev.toType[Float](o.valueAt(index))
     while (i < o.nElement() && ranking <= k) {
-      if (ev.toType[Float](o.valueAt(i)) >= precision) {
+      if (ev.toType[Float](o.valueAt(i)) > precision) {
         ranking += 1
       }
       i += 1

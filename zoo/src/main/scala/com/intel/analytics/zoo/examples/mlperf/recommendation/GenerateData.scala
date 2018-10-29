@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.intel.analytics.zoo.examples.mlperf.recommendation
+package com.intel.analytics.bigdl.examples.mlperf.recommendation
 
 import java.io.{DataOutputStream, FileOutputStream}
 import java.nio.ByteBuffer
@@ -22,9 +22,12 @@ import java.util
 
 import com.intel.analytics.bigdl._
 import com.intel.analytics.bigdl.dataset.{MiniBatch, Sample}
+import com.intel.analytics.bigdl.examples.mlperf.recommendation.NCFDataSet
 import com.intel.analytics.bigdl.numeric.NumericFloat
 import com.intel.analytics.bigdl.tensor.Tensor
+import com.intel.analytics.bigdl.utils.RandomGenerator
 import com.intel.analytics.zoo.common.NNContext
+import com.intel.analytics.zoo.examples.mlperf.recommendation.NeuralCFexample.Row
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, SQLContext}
@@ -38,69 +41,68 @@ import scala.io.Source
 import scala.util.{Random, Sorting}
 
 object GenerateData {
-  import NeuralCFexample._
-
-  def main(args: Array[String]): Unit = {
-    val defaultParams = NeuralCFParams()
-
-    // run with ml-20m, please use
-    val parser = new OptionParser[NeuralCFParams]("NCF Example") {
-      opt[String]("inputDir")
-        .text(s"inputDir")
-        .action((x, c) => c.copy(inputDir = x))
-      opt[String]("dataset")
-        .text(s"dataset, ml-20m or ml-1m, default is ml-1m")
-        .action((x, c) => c.copy(dataset = x))
-      opt[Int]('b', "batchSize")
-        .text(s"batchSize")
-        .action((x, c) => c.copy(batchSize = x))
-      opt[Int]('e', "nEpochs")
-        .text("epoch numbers")
-        .action((x, c) => c.copy(nEpochs = x))
-      opt[Int]("trainNeg")
-        .text("The Number of negative instances to pair with a positive train instance.")
-        .action((x, c) => c.copy(trainNegtiveNum = x))
-      opt[Int]("valNeg")
-        .text("The Number of negative instances to pair with a positive validation instance.")
-        .action((x, c) => c.copy(valNegtiveNum = x))
-    }
-
-    parser.parse(args, defaultParams).map {
-      params =>
-        run(params)
-    } getOrElse {
-      System.exit(1)
-    }
-  }
-
-  def run(param: NeuralCFParams): Unit = {
-    Logger.getLogger("org").setLevel(Level.ERROR)
-    val conf = new SparkConf()
-    conf.setAppName("NCFExample").set("spark.sql.crossJoin.enabled", "true")
-      .set("spark.driver.maxResultSize", "2048")
-    val sc = NNContext.initNNContext(conf)
-    val sqlContext = SQLContext.getOrCreate(sc)
-
-    val inputDir = param.inputDir
-
-    val (ratings, userCount, itemCount, itemMapping) =
-      loadPublicData(sqlContext, param.inputDir, param.dataset)
-    ratings.cache()
-    println(s"${userCount} ${itemCount}")
-
-    val (evalPos, trainSet, valSamples) = generateTrainValSet(ratings, userCount, itemCount,
-      trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
-    val ncfDataSet = new NCFDataSet(trainSet, evalPos,
-      param.trainNegtiveNum, param.batchSize, userCount, itemCount)
-    ncfDataSet.shuffle()
-    val trainIterator = ncfDataSet.data(true)
-    saveTrainToBinary(trainIterator, "/tmp/1234/")
-
-
-
-    println()
-
-  }
+  val logger = Logger.getLogger(this.getClass)
+//  import com.intel.analytics.zoo.examples.mlperf.recommendation.NeuralCFexample._
+//
+//  def main(args: Array[String]): Unit = {
+//    val defaultParams = NeuralCFParams()
+//
+//    // run with ml-20m, please use
+//    val parser = new OptionParser[NeuralCFParams]("NCF Example") {
+//      opt[String]("inputDir")
+//        .text(s"inputDir")
+//        .action((x, c) => c.copy(inputDir = x))
+//      opt[String]("dataset")
+//        .text(s"dataset, ml-20m or ml-1m, default is ml-1m")
+//        .action((x, c) => c.copy(dataset = x))
+//      opt[Int]('b', "batchSize")
+//        .text(s"batchSize")
+//        .action((x, c) => c.copy(batchSize = x))
+//      opt[Int]('e', "nEpochs")
+//        .text("epoch numbers")
+//        .action((x, c) => c.copy(nEpochs = x))
+//      opt[Int]("trainNeg")
+//        .text("The Number of negative instances to pair with a positive train instance.")
+//        .action((x, c) => c.copy(trainNegtiveNum = x))
+//      opt[Int]("valNeg")
+//        .text("The Number of negative instances to pair with a positive validation instance.")
+//        .action((x, c) => c.copy(valNegtiveNum = x))
+//    }
+//
+//    parser.parse(args, defaultParams).map {
+//      params =>
+//        run(params)
+//    } getOrElse {
+//      System.exit(1)
+//    }
+//  }
+//
+//  def run(param: NeuralCFParams): Unit = {
+//    Logger.getLogger("org").setLevel(Level.ERROR)
+//    val conf = new SparkConf()
+//    conf.setAppName("NCFExample").set("spark.sql.crossJoin.enabled", "true")
+//      .set("spark.driver.maxResultSize", "2048")
+//    val sc = NNContext.initNNContext(conf)
+//    val sqlContext = SQLContext.getOrCreate(sc)
+//
+//    val inputDir = param.inputDir
+//
+//    val (ratings, userCount, itemCount, itemMapping) =
+//      loadPublicData(sqlContext, param.inputDir, param.dataset)
+//    ratings.cache()
+//    println(s"${userCount} ${itemCount}")
+//
+//    val (evalPos, trainSet, valSamples) = generateTrainValSet(ratings, userCount, itemCount,
+//      trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
+//    val ncfDataSet = new NCFDataSet(trainSet,
+//      param.trainNegtiveNum, param.batchSize, userCount, itemCount)
+//    ncfDataSet.shuffle()
+//    val trainIterator = ncfDataSet.data(true)
+//    saveTrainToBinary(trainIterator, "/tmp/1234/")
+//
+//    println()
+//
+//  }
 
   def generateTrainValSet(
         rating: DataFrame,
@@ -180,32 +182,55 @@ object GenerateData {
     groupedRatings.foreach(x => Sorting.quickSort(x._2))
     val groupUserAndItems = groupedRatings.map(x => (x._1, x._2.map(_.itemId)))
 
-    val evalPos = groupUserAndItems.filter(_._2.length >= 20).map {x =>
+    // test ratings of bigdl
+    val evalPosBigDL = groupUserAndItems.filter(_._2.length >= 20).map {x =>
       val rows = x._2
       val last = rows.last
       x._1 -> last
     }
+    /*
+     Notice: This test-rating.csv comes from reference pytorch code.
+     A lot of user's latest item has the same timestamp, and quicksort using in reference code is
+     an unstable sort, so it's very hard to generate the same test-ratings. To stay the same with
+     reference, we will load pytorch's test-ratings to instead BigDL's test-ratings.
+
+     As our item mapping is different, we use add "original_items.sort(axis=0)" to reference convert.py
+     (after "original_items = df[ITEM_COLUMN].unique()") to get the same item mapping with BigDL.
+     Then get this test-ratings.csv.
+    */
+    val evalPos = Source.fromFile("test-ratings.csv").getLines()
+      .map{line =>
+        val pos = line.split("\t")
+        val userId = pos(0).toInt + 1
+        val posItem = pos(1).toInt + 1
+        (userId, posItem)
+      }.toMap
+    var count = 0
+    (1 to evalPos.size).foreach{userId =>
+      if (evalPos(userId) != evalPosBigDL(userId)) {
+        count += 1
+      }
+    }
+    logger.info(s"Compared with pytorch's test-ratings.csv, eval positive is different $count of ${evalPos.size}, " +
+      s"so we use pytorch's test-rating.csv to stay the same with pytorch's test positive.")
 
     val trainSet = groupUserAndItems.map { x =>
       val rows = x._2
-      val last = rows.last
-      if (rows.length >= 20) {
-        x._1 -> rows.take(rows.length - 1).toSet
-      } else {
-        x._1 -> rows.toSet
-      }
+      val items = rows.filter(evalPos(x._1) != _).toSet
+      assert(items.size == rows.size - 1)
+      x._1 -> items
     }
 
     val negsResult = groupUserAndItems.map { x =>
       val key = x._1
       val items = x._2.toSet
 
-      val gen = new Random(key + seed)
+      val gen = new RandomGenerator().setSeed(key + seed)
       val negs = new Array[Int](valNegNum)
 
       var i = 0
       while(i < valNegNum) {
-        val negItem = gen.nextInt(itemCount) + 1
+        val negItem = math.floor(gen.uniform(0, itemCount)).toInt + 1
         if (!items.contains(negItem)) {
           negs(i) = negItem
           i += 1

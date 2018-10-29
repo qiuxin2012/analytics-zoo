@@ -1,11 +1,14 @@
 package com.intel.analytics.zoo.models.recommendation
 
+import com.intel.analytics.bigdl.examples.mlperf.recommendation.NCFDataSet
 import com.intel.analytics.bigdl.nn.BCECriterion
 import com.intel.analytics.bigdl.optim.{EmbeddingAdam2, NCFOptimizer2, ParallelAdam, Trigger}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.utils.{Engine, RandomGenerator, T}
-import com.intel.analytics.zoo.examples.mlperf.recommendation.{NCFDataSet, NcfLogger, NeuralCFexample}
+import com.intel.analytics.zoo.examples.mlperf.recommendation.{NcfLogger, NeuralCFexample}
 import com.intel.analytics.zoo.pipeline.api.keras.ZooSpecHelper
+
+import scala.io.Source
 
 class NcfDatasetSpec extends ZooSpecHelper{
   "dataset" should "generate right result" in {
@@ -35,7 +38,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val userCount = 8
     val itemCount = 10
 
-    val ncfD = new NCFDataSet(trainSet, valPos,
+    val ncfD = new NCFDataSet(trainSet,
       trainNegatives, batchSize, userCount, itemCount, processes = 3)
 
     RandomGenerator.RNG.setSeed(10)
@@ -51,7 +54,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
         if (target.valueAt(i, 1) == 1) {
           Some(input.valueAt(i, 2)) should contain oneOf (userID + 1, userID + 2)
         } else {
-          Some(input.valueAt(i, 2)) should not contain oneOf (userID, userID + 1, userID + 2)
+          Some(input.valueAt(i, 2)) should not contain oneOf (userID + 1, userID + 2)
         }
       }
       count += 1
@@ -87,7 +90,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val userCount = 8
     val itemCount = 10
 
-    val ncfD = new NCFDataSet(trainSet, valPos,
+    val ncfD = new NCFDataSet(trainSet,
       trainNegatives, batchSize, userCount, itemCount, processes = 3)
 
     RandomGenerator.RNG.setSeed(10)
@@ -102,7 +105,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
         if (target.valueAt(i, 1) == 1) {
           Some(input.valueAt(i, 2)) should contain oneOf (userID + 1, userID + 2)
         } else {
-          Some(input.valueAt(i, 2)) should not contain oneOf (userID, userID + 1, userID + 2)
+          Some(input.valueAt(i, 2)) should not contain oneOf (userID + 1, userID + 2)
         }
       }
     }
@@ -119,7 +122,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
         if (target.valueAt(i, 1) == 1) {
           Some(input.valueAt(i, 2)) should contain oneOf (userID + 1, userID + 2)
         } else {
-          Some(input.valueAt(i, 2)) should not contain oneOf (userID, userID + 1, userID + 2)
+          Some(input.valueAt(i, 2)) should not contain oneOf (userID + 1, userID + 2)
         }
       }
     }
@@ -152,7 +155,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val userCount = 8
     val itemCount = 10
 
-    val ncfD = new NCFDataSet(trainSet, valPos,
+    val ncfD = new NCFDataSet(trainSet,
       trainNegatives, batchSize, userCount, itemCount, processes = 3)
     val userCounts = new Array[Int](8)
 
@@ -169,7 +172,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
         if (target.valueAt(i, 1) == 1) {
           Some(input.valueAt(i, 2)) should contain oneOf (userID + 1, userID + 2)
         } else {
-          Some(input.valueAt(i, 2)) should not contain oneOf (userID, userID + 1, userID + 2)
+          Some(input.valueAt(i, 2)) should not contain oneOf (userID + 1, userID + 2)
         }
       }
     }
@@ -187,7 +190,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
         if (target.valueAt(i, 1) == 1) {
           Some(input.valueAt(i, 2)) should contain oneOf (userID + 1, userID + 2)
         } else {
-          Some(input.valueAt(i, 2)) should not contain oneOf (userID, userID + 1, userID + 2)
+          Some(input.valueAt(i, 2)) should not contain oneOf (userID + 1, userID + 2)
         }
       }
     }
@@ -222,7 +225,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val userCount = 8
     val itemCount = 10
 
-    val ncfD = new NCFDataSet(trainSet, valPos,
+    val ncfD = new NCFDataSet(trainSet,
       trainNegatives, batchSize, userCount, itemCount, processes = 3)
 
     ncfD.shuffle()
@@ -260,12 +263,12 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val userCount = 8
     val itemCount = 10
 
-    val ncfD = new NCFDataSet(trainSet, valPos,
+    val ncfD = new NCFDataSet(trainSet,
       trainNegatives, batchSize, userCount, itemCount, processes = 3)
     ncfD.shuffle()
     ncfD.shuffle()
     val tensor1 = Tensor(ncfD.inputBuffer, Array(64, 2))
-    val ncfD2 = new NCFDataSet(trainSet, valPos,
+    val ncfD2 = new NCFDataSet(trainSet,
       trainNegatives, batchSize, userCount, itemCount, processes = 3)
     ncfD2.shuffle()
     val tensor2 = Tensor(ncfD2.inputBuffer, Array(64, 2))
@@ -305,7 +308,7 @@ class NcfDatasetSpec extends ZooSpecHelper{
     val numFactors = 8
     val learningRate = 1e-3
 
-    val trainDataset = new NCFDataSet(trainSet, valPos,
+    val trainDataset = new NCFDataSet(trainSet,
       trainNegatives, batchSize, userCount, itemCount, processes = 3)
     trainDataset.shuffle()
 
@@ -384,6 +387,34 @@ class NcfDatasetSpec extends ZooSpecHelper{
 
   "log" should "works fine" in {
     NcfLogger.info("123")
+
+  }
+
+  "generate" should "works" in {
+    val posFile = "/home/xin/datasets/ncf/test-ratings.csv"
+    val trainFile = "/home/xin/datasets/ncf/0.txt"
+    val testPositives = Source.fromFile(posFile).getLines()
+      .map{line =>
+        val pos = line.split("\t")
+        val userId = pos(0).toInt
+        val posItem = pos(1).toInt
+        (userId, posItem)
+      }.toMap
+
+    var i = 0
+    val trainData = Source.fromFile(trainFile).getLines()
+      .foreach{line =>
+        val pos = line.split(",")
+        val userId = pos(0).toInt
+        val item = pos(1).toInt
+        val label = pos(2).toInt
+        if (label == 0 && testPositives(userId) == item) {
+          println(s"userId: $userId, itemId $item")
+          i += 1
+        }
+      }
+
+    println(i)
 
   }
 }
