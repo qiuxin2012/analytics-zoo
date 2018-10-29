@@ -151,6 +151,13 @@ object NeuralCFexample {
         beta1 = param.beta1,
         beta2 = param.beta2,
         Epsilon = param.eps))
+//    val optimMethod = new ParallelAdam[Float](
+//        learningRate = param.learningRate,
+//        learningRateDecay = param.learningRateDecay,
+//        beta1 = param.beta1,
+//        beta2 = param.beta2,
+//        Epsilon = param.eps)
+//    val validateBatchSize = optimMethod.parallelNum
     val validateBatchSize = optimMethod("linears").asInstanceOf[ParallelAdam[Float]].parallelNum
 
     val hiddenLayers = param.layers.split(",").map(_.toInt)
