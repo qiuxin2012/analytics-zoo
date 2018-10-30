@@ -74,14 +74,12 @@ class NCFDataSet (
             label.storage().array(), 0, batchSize)
           miniBatch
         } else if (curIndex == numMiniBatch - 1) {
-          // TODO
-          val restItem = numOfSample - curIndex * batchSize
-          System.arraycopy(inputBuffer, curIndex * 2 * batchSize,
-            input.storage().array(), 0, restItem * 2)
-          System.arraycopy(labelBuffer, curIndex * batchSize,
-            label.storage().array(), 0, restItem)
-          input.resize(restItem, 2)
-          label.resize(restItem, 1)
+          // left padding
+          val leftPaddingOffset = numOfSample - batchSize
+          System.arraycopy(inputBuffer, leftPaddingOffset * 2,
+            input.storage().array(), 0, batchSize * 2)
+          System.arraycopy(labelBuffer, leftPaddingOffset,
+            label.storage().array(), 0, batchSize)
           miniBatch
         } else {
           null
