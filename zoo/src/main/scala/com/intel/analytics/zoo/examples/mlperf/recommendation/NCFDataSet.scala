@@ -35,6 +35,7 @@ class NCFDataSet (
   val generateTasks = NCFDataSet.generateTasks(trainSet, trainNegatives, processes, seed)
 
   override def shuffle(): Unit = {
+    val start = System.currentTimeMillis()
     NcfLogger.info("input_hp_num_neg", trainNegatives)
     NCFDataSet.generateNegativeItems(
       trainSet,
@@ -46,7 +47,9 @@ class NCFDataSet (
       trainSize * trainNegatives * 2, trainSize * 2)
     util.Arrays.fill(labelBuffer, 0, trainSize * trainNegatives, 0)
     util.Arrays.fill(labelBuffer, trainSize * trainNegatives, trainSize * (1 + trainNegatives), 1)
+    println(s"generation cost ${(System.currentTimeMillis() - start) / 1e3} s")
     NCFDataSet.shuffle(inputBuffer, labelBuffer, seed, processes)
+    println(s"shuffle and generation cost ${(System.currentTimeMillis() - start) / 1e3} s")
 //    NCFDataSet.shuffle(inputBuffer, labelBuffer, seed)
     seed += processes
   }
@@ -154,7 +157,7 @@ object NCFDataSet {
       val rand = new Random(seed + i)
       val length = if (i < extraSize) taskSize + 1 else taskSize
       (i, length, rand)
-    }) //.par
+    }).par
     // first shuffle
     seeds.foreach{v =>
       val offset = v._1
