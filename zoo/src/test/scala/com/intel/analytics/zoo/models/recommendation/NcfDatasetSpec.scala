@@ -390,31 +390,31 @@ class NcfDatasetSpec extends ZooSpecHelper{
 
   }
 
-  "generate" should "works" in {
-    val posFile = "/home/xin/datasets/ncf/test-ratings.csv"
-    val trainFile = "/home/xin/datasets/ncf/0.txt"
-    val testPositives = Source.fromFile(posFile).getLines()
-      .map{line =>
-        val pos = line.split("\t")
-        val userId = pos(0).toInt
-        val posItem = pos(1).toInt
-        (userId, posItem)
-      }.toMap
-
-    var i = 0
-    val trainData = Source.fromFile(trainFile).getLines()
-      .foreach{line =>
-        val pos = line.split(",")
-        val userId = pos(0).toInt
-        val item = pos(1).toInt
-        val label = pos(2).toInt
-        if (label == 0 && testPositives(userId) == item) {
-          println(s"userId: $userId, itemId $item")
-          i += 1
-        }
-      }
-
-    println(i)
-
-  }
+//  "generate" should "works" in {
+//    val posFile = "/home/xin/datasets/ncf/test-ratings.csv"
+//    val trainFile = "/home/xin/datasets/ncf/0.txt"
+//    val testPositives = Source.fromFile(posFile).getLines()
+//      .map{line =>
+//        val pos = line.split("\t")
+//        val userId = pos(0).toInt
+//        val posItem = pos(1).toInt
+//        (userId, posItem)
+//      }.toMap
+//
+//    var i = 0
+//    val trainData = Source.fromFile(trainFile).getLines()
+//      .foreach{line =>
+//        val pos = line.split(",")
+//        val userId = pos(0).toInt
+//        val item = pos(1).toInt
+//        val label = pos(2).toInt
+//        if (label == 0 && testPositives(userId) == item) {
+//          println(s"userId: $userId, itemId $item")
+//          i += 1
+//        }
+//      }
+//
+//    println(i)
+//
+//  }
 }
