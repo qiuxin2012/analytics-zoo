@@ -68,6 +68,7 @@ object NeuralCFexample {
 
   def main(args: Array[String]): Unit = {
     NcfLogger.info("run_start")
+    NcfLogger.info("run_clear_caches")
 
     val defaultParams = NeuralCFParams()
 
@@ -133,6 +134,8 @@ object NeuralCFexample {
     Logger.getLogger("org").setLevel(Level.ERROR)
     Engine.init
 
+
+    NcfLogger.info("opt_learning_rate", param.learningRate)
     NcfLogger.info("create_optim_method", Array(("name", """"Adam""""),
       ("lr", param.learningRate.toString),
       ("beta1", param.beta1.toString),
@@ -164,6 +167,8 @@ object NeuralCFexample {
 
     val (ratings, userCount, itemCount, itemMapping) = loadPublicData(param.inputDir, param.dataset)
 
+    NcfLogger.info("preproc_hp_num_eval", param.valNegtiveNum)
+    NcfLogger.info("preproc_hp_sample_eval_replacement")
     // TODO: As reference pytorch code doesn't pass seed to generate test negative, we don't either.
     val (evalPos, trainSet, valSample) = GenerateData.generateTrainValSetLocal(ratings, itemCount,
         trainNegNum = param.trainNegtiveNum, valNegNum = param.valNegtiveNum)
@@ -178,6 +183,8 @@ object NeuralCFexample {
 //    val trainDataset = (DataSet.array[MiniBatch[Float]](loadPytorchTrain("0.txt", param.batchSize))).toLocal()
 
     RandomGenerator.RNG.setSeed(param.seed)
+    NcfLogger.info("model_hp_mf_dim", param.numFactors)
+    NcfLogger.info("model_hp_mlp_layer_sizes", s"[${hiddenLayers.mkString(", ")}]")
     val ncf = NeuralCFV2[Float](
       userCount = userCount,
       itemCount = itemCount,
