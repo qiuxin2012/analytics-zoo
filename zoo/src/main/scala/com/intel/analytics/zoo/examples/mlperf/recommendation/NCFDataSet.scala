@@ -46,8 +46,8 @@ class NCFDataSet (
       trainSize * trainNegatives * 2, trainSize * 2)
     util.Arrays.fill(labelBuffer, 0, trainSize * trainNegatives, 0)
     util.Arrays.fill(labelBuffer, trainSize * trainNegatives, trainSize * (1 + trainNegatives), 1)
-    // NCFDataSet.shuffle(inputBuffer, labelBuffer, seed, processes)
-    NCFDataSet.shuffle(inputBuffer, labelBuffer, seed)
+    NCFDataSet.shuffle(inputBuffer, labelBuffer, seed, processes)
+//    NCFDataSet.shuffle(inputBuffer, labelBuffer, seed)
     seed += processes
   }
 
@@ -135,6 +135,13 @@ object NCFDataSet {
     }
   }
 
+  /**
+   * shuffle two times with multithread
+   * @param inputBuffer
+   * @param labelBuffer
+   * @param seed
+   * @param parallelism
+   */
   def shuffle(inputBuffer: Array[Float],
               labelBuffer: Array[Float],
               seed: Int,
@@ -148,6 +155,7 @@ object NCFDataSet {
       val length = if (i < extraSize) taskSize + 1 else taskSize
       (i, length, rand)
     }).par
+    // first shuffle
     seeds.foreach{v =>
       val offset = v._1
       val length = v._2
@@ -159,7 +167,24 @@ object NCFDataSet {
         if (ex != current) {
           exchange(inputBuffer, labelBuffer,
             current, ex)
-
+        }
+        i += 1
+      }
+    }
+    // second shuffle
+    seeds.foreach{v =>
+      val offset = v._1 * taskSize + {
+        if (v._1 < extraSize) v._1 else extraSize
+      }
+      val length = v._2
+      val rand = v._3
+      var i = 0
+      while (i < length) {
+        val ex = rand.nextInt(length) + offset
+        val current = i + offset
+        if (ex != current) {
+          exchange(inputBuffer, labelBuffer,
+            current, ex)
         }
         i += 1
       }
