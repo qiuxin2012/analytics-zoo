@@ -27,6 +27,7 @@ import com.intel.analytics.bigdl.numeric.NumericFloat
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.utils.RandomGenerator
 import com.intel.analytics.zoo.common.NNContext
+import com.intel.analytics.zoo.examples.mlperf.recommendation.NcfLogger
 import com.intel.analytics.zoo.examples.mlperf.recommendation.NeuralCFexample.Row
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.SparkConf
@@ -183,6 +184,7 @@ object GenerateData {
     val groupUserAndItems = groupedRatings.map(x => (x._1, x._2.map(_.itemId)))
 
     // test ratings of bigdl
+    NcfLogger.info("preproc_hp_min_ratings", 20)
     val evalPosBigDL = groupUserAndItems.filter(_._2.length >= 20).map {x =>
       val rows = x._2
       val last = rows.last
@@ -214,6 +216,7 @@ object GenerateData {
     logger.info(s"Compared with pytorch's test-ratings.csv, eval positive is different $count of ${evalPos.size}, " +
       s"so we use pytorch's test-rating.csv to stay the same with pytorch's test positive.")
 
+    NcfLogger.info("input_hp_sample_train_replacement")
     val trainSet = groupUserAndItems.map { x =>
       val rows = x._2
       val items = rows.filter(evalPos(x._1) != _).toSet
@@ -221,6 +224,7 @@ object GenerateData {
       x._1 -> items
     }
 
+    NcfLogger.info("input_step_eval_neg_gen")
     val negsResult = groupUserAndItems.map { x =>
       val key = x._1
       val items = x._2.toSet
