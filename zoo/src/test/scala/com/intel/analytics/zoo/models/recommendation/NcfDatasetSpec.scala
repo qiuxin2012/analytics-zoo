@@ -2,7 +2,7 @@ package com.intel.analytics.zoo.models.recommendation
 
 import com.intel.analytics.bigdl.examples.mlperf.recommendation.NCFDataSet
 import com.intel.analytics.bigdl.nn.BCECriterion
-import com.intel.analytics.bigdl.optim.{EmbeddingAdam2, NCFOptimizer2, ParallelAdam, Trigger}
+import com.intel.analytics.bigdl.optim._
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.utils.{Engine, RandomGenerator, T}
 import com.intel.analytics.zoo.examples.mlperf.recommendation.{NcfLogger, NeuralCFexample}
@@ -351,6 +351,72 @@ class NcfDatasetSpec extends ZooSpecHelper{
 
     optimizer
       .setEndWhen(Trigger.maxEpoch(3))
+      .optimize()
+
+  }
+
+  "dataset" should "run with ncfoptimizer and localOptimizer" in {
+    System.setProperty("bigdl.localMode", "true")
+    Engine.init(1, 1, false)
+    val maxEpoch = 10
+    val trainSet = Array(
+      (1, Set(2, 3)),
+      (2, Set(3, 4)),
+      (3, Set(4, 5)),
+      (4, Set(5, 6)),
+      (5, Set(6, 7)),
+      (6, Set(7, 8)),
+      (7, Set(8, 9)),
+      (8, Set(9, 10)))
+
+    val trainNegatives = 3
+    val batchSize = 16
+    val userCount = 8
+    val itemCount = 10
+    val numFactors = 8
+    val learningRate = 1e-3
+
+    val trainDataset = new NCFDataSet(trainSet,
+      trainNegatives, batchSize, userCount, itemCount, processes = 1, seed = 1)
+
+    val hiddenLayers = Array(16, 16, 8, 4)
+
+    val optimMethod = Map(
+      "embeddings" -> new EmbeddingAdam2[Float](
+        learningRate = learningRate,
+        userCount = userCount,
+        itemCount = itemCount,
+        embedding1 = hiddenLayers(0) / 2,
+        embedding2 = numFactors),
+      "linears" -> new ParallelAdam[Float](
+        learningRate = learningRate))
+
+    val ncf = NeuralCFV2[Float](
+      userCount = userCount,
+      itemCount = itemCount,
+      numClasses = 1,
+      userEmbed = hiddenLayers(0) / 2,
+      itemEmbed = hiddenLayers(0) / 2,
+      hiddenLayers = hiddenLayers.slice(1, hiddenLayers.length),
+      mfEmbed = numFactors)
+
+    val optimizer = new NCFOptimizer2[Float](ncf.cloneModule(),
+      trainDataset, BCECriterion[Float]())
+
+    optimizer
+      .setEndWhen(Trigger.maxEpoch(maxEpoch))
+      .setOptimMethods(optimMethod)
+      .optimize()
+
+    val localDataset = new NCFDataSet(trainSet,
+      trainNegatives, batchSize, userCount, itemCount, processes = 1, seed = 1)
+    val localOptimizer = new LocalOptimizer[Float](ncf.cloneModule(),
+      localDataset, BCECriterion[Float]())
+    val localOptimMethod = new ParallelAdam[Float](
+      learningRate = learningRate)
+    localOptimizer
+      .setEndWhen(Trigger.maxEpoch(maxEpoch))
+      .setOptimMethod(localOptimMethod)
       .optimize()
 
   }
