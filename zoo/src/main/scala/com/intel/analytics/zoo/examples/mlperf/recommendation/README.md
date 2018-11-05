@@ -39,11 +39,17 @@ bash verify_dataset.sh
 
 
 Run the `run_and_time.sh` script with an integer parallelism and seed.
-CORE is the parallel number of BigDL, the best practice is physical core number of the machine.
-SEED is an interger value.
+CORE is the parallel number of BigDL, the best practice is half of the physical core number of the machine. 28 for skylake 8180. SEED is an interger value.
 
 ```bash
 bash run_and_time.sh PARALLELISM SEED
+```
+
+### Run on Skylake 8180
+
+Run `run.sh` script with an integer `n times`, it will run `n times` of ncf training with the seed of time seconds, and write logs to folder `./logs`.
+```bash
+bash run.sh <run times>
 ```
 
 # 3. Dataset/Environment
