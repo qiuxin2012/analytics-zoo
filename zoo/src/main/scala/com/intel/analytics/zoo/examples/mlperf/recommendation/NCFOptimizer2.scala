@@ -238,6 +238,15 @@ class NCFOptimizer2[T: ClassTag](
       state("neval") = state[Int]("neval") + 1
 
       if (count >= numSamples) {
+        val userC = 138493
+        val itemC = 26744
+        val userIds = Tensor(userC).range(1, userC)
+        val itemIds = Tensor(itemC).range(1, itemC)
+        val userItem = Tensor(math.max(userC, itemC), 2).fill(ev.one)
+        userItem.select(2, 1).narrow(1, 1, userC).copy(userIds)
+        userItem.select(2, 2).narrow(1, 1, itemC).copy(itemIds)
+        embeddingOptim.updateWeight(userItem, embeddingWeight)
+
         val head = header(state[Int]("epoch"), count, numSamples, state[Int]("neval"), wallClockTime)
         logger.info(s"$head " +
           s"loss is $loss, training cost ${(wallClockTime - state[Long]("trainingTime")) / 1e9}s. " +

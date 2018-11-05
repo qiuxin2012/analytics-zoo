@@ -141,19 +141,19 @@ class EmbeddingAdam2[@specialized(Float, Double) T: ClassTag](
       var offset = 0
       EmbeddingAdam2.lazyUpdate(itemRecord, tid, itemTaskSize, extraItemTask, embedding1, parameter,
         state[Tensor[T]](s"buffer1$tid"), clr, beta1, beta2, eps, offset,
-        itemTimestep, timestep)
+        itemTimestep, timestep, false)
       offset += itemCount * embedding1
       EmbeddingAdam2.lazyUpdate(userRecord, tid, userTaskSize, extraUserTask, embedding1, parameter,
         state[Tensor[T]](s"buffer2$tid"), clr, beta1, beta2, eps, offset,
-        userTimestep, timestep)
+        userTimestep, timestep, false)
       offset += userCount * embedding1
       EmbeddingAdam2.lazyUpdate(itemRecord, tid, itemTaskSize, extraItemTask, embedding2, parameter,
         state[Tensor[T]](s"buffer3$tid"), clr, beta1, beta2, eps, offset,
-        itemTimestep, timestep)
+        itemTimestep, timestep, true)
       offset += itemCount * embedding2
       EmbeddingAdam2.lazyUpdate(userRecord, tid, userTaskSize, extraUserTask, embedding2, parameter,
         state[Tensor[T]](s"buffer4$tid"), clr, beta1, beta2, eps, offset,
-        userTimestep, timestep)
+        userTimestep, timestep, true)
 
       times(tid) = (System.nanoTime() - start) / 1000000
     }))
@@ -266,7 +266,8 @@ object EmbeddingAdam2 {
     eps: Double,
     parameterOffset: Int,
     timestamps: Array[Int],
-    timestamp: Int)(implicit ev: TensorNumeric[T]): Unit = {
+    timestamp: Int,
+    updateTimeStamp: Boolean)(implicit ev: TensorNumeric[T]): Unit = {
 
     val idStart = (tid * taskSize + math.min(tid, extraTask))
     val idLength = (taskSize + (if (tid < extraTask) 1 else 0))
@@ -304,6 +305,9 @@ object EmbeddingAdam2 {
           val beta2t = pow2N(timestamp - lastTimestamp)
           _s.mul(ev.fromType(beta1t))
           _r.mul(ev.fromType(beta2t))
+        }
+        if (timestamps != null && updateTimeStamp) {
+          timestamps(id) = timestamp
         }
       }
     }
