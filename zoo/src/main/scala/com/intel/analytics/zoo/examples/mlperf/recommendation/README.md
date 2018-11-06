@@ -92,3 +92,6 @@ After every epoch through the training data.
 ### Evaluation thoroughness
 
 Every users last item rated, i.e. all held out positive examples.
+
+# 6. Optimizations
+Compare to reference code, we have done some optimizations. See [Optimization](Optimization.md) for details.
