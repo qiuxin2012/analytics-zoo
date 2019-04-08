@@ -31,6 +31,11 @@ private[zoo] abstract class NativeArrayConverter[T: ClassTag]
 
   def toArray(recordIterator: Iterator[T],
       countPerPartition: Iterator[(Int, Long)]): Iterator[ArrayLike[T]]
+
+  def toArray(recordIterator: Iterable[T],
+              countPerPartition: Iterator[(Int, Long)]): Iterator[ArrayLike[T]] = {
+    throw new IllegalArgumentException()
+  }
 }
 
 private[zoo] class ByteRecordConverter(
@@ -55,6 +60,21 @@ private[zoo] class ByteRecordConverter(
       }
       Iterator.single(ByteRecordArray(nativeArray, labels))
     }
+
+  override def toArray(recordIterator: Iterable[ByteRecord],
+                       countPerPartition: Iterator[(Int, Long)]): Iterator[ArrayLike[ByteRecord]] = {
+    val count = countPerPartition.next()
+    val nativeArray = new VarLenBytesArray(count._1, count._2,
+      memoryType = memoryType)
+    val labels = new Array[Float](count._1)
+    var i = 0
+    recordIterator.foreach{data =>
+      nativeArray.set(i, data.data)
+      labels(i) = data.label
+      i += 1
+    }
+    Iterator.single(ByteRecordArray(nativeArray, labels))
+  }
 }
 
 private[zoo] case class ByteRecordArray(records: VarLenBytesArray,
@@ -195,6 +215,29 @@ object PmemFeatureSet {
     new CachedDistributedFeatureSet[T](arrayRDD.asInstanceOf[RDD[ArrayLike[T]]])
   }
 
+  private def rddIteratable[T: ClassTag](data: RDD[Iterable[T]],
+                               nativeArrayConverter: NativeArrayConverter[T]):
+  DistributedFeatureSet[T] = {
+    val countPerPartition = data.map{ iterable =>
+      var totalBytes: Long = 0L
+      var totalRecordNum = 0
+      iterable.foreach{ record =>
+        totalRecordNum += 1
+        totalBytes += nativeArrayConverter.getBytesPerRecord(record)
+      }
+      (totalRecordNum, totalBytes)
+    }
+    val arrayRDD = data.zipPartitions(countPerPartition) { (dataIter, countIter) =>
+      // Add a hooker to offset the pmem resource
+      Runtime.getRuntime().addShutdownHook(new Thread() {
+        override def run(): Unit = NativeArray.free()
+      })
+      nativeArrayConverter.toArray(dataIter.next(), countIter)
+    }.setName(s"FeatureSet: ${data.name} cached in PMEM")
+      .cache()
+    new CachedDistributedFeatureSet[T](arrayRDD.asInstanceOf[RDD[ArrayLike[T]]])
+  }
+
   def rdd[T: ClassTag](data: RDD[T],
       memoryType: MemoryType = PMEM): DistributedFeatureSet[T] = {
     var clazz: ClassTag[T] = implicitly[ClassTag[T]]
@@ -208,6 +251,19 @@ object PmemFeatureSet {
       case t if t == classOf[ImageFeature] =>
         rdd[ImageFeature](data.asInstanceOf[RDD[ImageFeature]],
           new ImageFeatureConverter(memoryType)).asInstanceOf[DistributedFeatureSet[T]]
+      case _ =>
+        throw new IllegalArgumentException(
+          s"${implicitly[ClassTag[T]].runtimeClass} is not supported for now")
+    }
+  }
+
+  def rddIterable[T: ClassTag](data: RDD[Iterable[T]],
+                       memoryType: MemoryType = PMEM): DistributedFeatureSet[T] = {
+    var clazz: ClassTag[T] = implicitly[ClassTag[T]]
+    implicitly[ClassTag[T]].runtimeClass match {
+      case t if t == classOf[ByteRecord] =>
+        rddIteratable[ByteRecord](data.asInstanceOf[RDD[Iterable[ByteRecord]]],
+          new ByteRecordConverter(memoryType)).asInstanceOf[DistributedFeatureSet[T]]
       case _ =>
         throw new IllegalArgumentException(
           s"${implicitly[ClassTag[T]].runtimeClass} is not supported for now")

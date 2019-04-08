@@ -311,8 +311,8 @@ object FeatureSet {
        data: RDD[T],
        memoryType: MemoryType = DRAM,
        dataStrategy: DataStrategy = PARTITIONED): DistributedFeatureSet[T] = {
+    val nodeNumber = EngineRef.getNodeNumber()
     if (dataStrategy == PARTITIONED) {
-      val nodeNumber = EngineRef.getNodeNumber()
       val repartitionedData = data.coalesce(nodeNumber, true).setName(data.name)
       memoryType match {
         case DRAM =>
@@ -328,8 +328,24 @@ object FeatureSet {
             s"MemoryType: ${memoryType} is not supported at the moment")
       }
     } else {
-      throw new IllegalArgumentException(
-        s"DataStrategy ${dataStrategy} is not supported at the moment")
+      val replicatedData = data
+        .flatMap(v => Array.tabulate(nodeNumber)(i => (i, v)))
+        .coalesce(nodeNumber)
+        .groupByKey()
+        .map(v => v._2)
+      memoryType match {
+//        case DRAM =>
+//          DRAMFeatureSet.rdd(replicatedData)
+        case PMEM =>
+          logger.info("~~~~~~~ Caching to AEP With Replicated Partition ~~~~~~~")
+          PmemFeatureSet.rddIterable(replicatedData, PMEM)
+        case DIRECT =>
+          logger.info("~~~~~~~ Caching with DIRECT With Replicated Partition~~~~~~~")
+          PmemFeatureSet.rddIterable[T](replicatedData, DIRECT)
+        case _ =>
+          throw new IllegalArgumentException(
+            s"MemoryType: ${memoryType} is not supported at the moment")
+      }
     }
   }
 }
