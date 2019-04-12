@@ -19,7 +19,7 @@ package com.intel.analytics.zoo.feature
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.intel.analytics.bigdl.DataSet
-import com.intel.analytics.bigdl.dataset.{AbstractDataSet, DistributedDataSet, Transformer}
+import com.intel.analytics.bigdl.dataset.{AbstractDataSet, ByteRecord, DistributedDataSet, Transformer}
 import com.intel.analytics.bigdl.utils.RandomGenerator
 import com.intel.analytics.zoo.feature.common.{ArrayLike, ArrayLikeWrapper}
 import com.intel.analytics.zoo.feature.pmem._
@@ -328,17 +328,43 @@ object FeatureSet {
             s"MemoryType: ${memoryType} is not supported at the moment")
       }
     } else {
+//      data.persist()
+      val nativeArrayConverter = implicitly[ClassTag[T]].runtimeClass match {
+        case t if t == classOf[ByteRecord] =>
+            new ByteRecordConverter(memoryType)
+        case _ =>
+          throw new IllegalArgumentException(
+            s"${implicitly[ClassTag[T]].runtimeClass} is not supported for now")
+      }
+      val countPerPartition = data.mapPartitions{records =>
+        val nativeArrayConverter = new ByteRecordConverter(memoryType)
+        var totalBytes: Long = 0L
+        var totalRecordNum = 0
+        records.foreach{ record =>
+          totalRecordNum += 1
+          totalBytes += nativeArrayConverter.getBytesPerRecord(record.asInstanceOf[ByteRecord])
+        }
+        Iterator.single(totalRecordNum, totalBytes)
+      }.reduce((a, b) => (a._1 + b._1, a._2 + b._2))
       val replicatedData = data
         .flatMap(v => Array.tabulate(nodeNumber)(i => (i, v)))
         .coalesce(nodeNumber)
         .groupByKey()
         .map(v => v._2)
-      memoryType match {
+      val featureSet = memoryType match {
 //        case DRAM =>
 //          DRAMFeatureSet.rdd(replicatedData)
         case PMEM =>
           logger.info("~~~~~~~ Caching to AEP With Replicated Partition ~~~~~~~")
-          PmemFeatureSet.rddIterable(replicatedData, PMEM)
+          val arrayRDD = replicatedData.asInstanceOf[RDD[Iterable[ByteRecord]]].mapPartitions{dataIter =>
+            // Add a hooker to offset the pmem resource
+            Runtime.getRuntime().addShutdownHook(new Thread() {
+              override def run(): Unit = NativeArray.free()
+            })
+            nativeArrayConverter.toArray(dataIter.next(), Iterator.single(countPerPartition))
+          }.setName(s"FeatureSet: ${data.name} cached in PMEM")
+            .cache()
+          new CachedDistributedFeatureSet[T](arrayRDD.asInstanceOf[RDD[ArrayLike[T]]])
         case DIRECT =>
           logger.info("~~~~~~~ Caching with DIRECT With Replicated Partition~~~~~~~")
           PmemFeatureSet.rddIterable[T](replicatedData, DIRECT)
@@ -346,6 +372,8 @@ object FeatureSet {
           throw new IllegalArgumentException(
             s"MemoryType: ${memoryType} is not supported at the moment")
       }
+//      data.unpersist()
+      featureSet
     }
   }
 }

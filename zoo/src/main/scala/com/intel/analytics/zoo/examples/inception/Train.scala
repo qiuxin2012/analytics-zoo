@@ -48,7 +48,8 @@ object TrainInceptionV1 {
         EngineRef.getCoreNumber(),
         param.classNumber,
         MemoryType.fromString(param.memoryType),
-        param.opencv
+        param.opencv,
+        param.replicated
       )
       val valSet = ImageNet2012Val(
         param.folder + "/val",

@@ -226,13 +226,13 @@ object PmemFeatureSet {
         totalBytes += nativeArrayConverter.getBytesPerRecord(record)
       }
       (totalRecordNum, totalBytes)
-    }
-    val arrayRDD = data.zipPartitions(countPerPartition) { (dataIter, countIter) =>
+    }.first()
+    val arrayRDD = data.mapPartitions{dataIter =>
       // Add a hooker to offset the pmem resource
       Runtime.getRuntime().addShutdownHook(new Thread() {
         override def run(): Unit = NativeArray.free()
       })
-      nativeArrayConverter.toArray(dataIter.next(), countIter)
+      nativeArrayConverter.toArray(dataIter.next(), Iterator.single(countPerPartition))
     }.setName(s"FeatureSet: ${data.name} cached in PMEM")
       .cache()
     new CachedDistributedFeatureSet[T](arrayRDD.asInstanceOf[RDD[ArrayLike[T]]])

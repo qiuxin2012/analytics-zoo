@@ -40,7 +40,8 @@ object Options {
     gradientMin: Option[Double] = None,
     gradientMax: Option[Double] = None,
     memoryType: String = "DRAM",
-    opencv: Boolean = false
+    opencv: Boolean = false,
+    replicated: Boolean = false
   )
 
   val trainParser = new OptionParser[TrainParams]("BigDL Inception Example") {
@@ -106,6 +107,9 @@ object Options {
     opt[Unit]("opencv")
       .text("use opencv preprocessing")
       .action( (_, c) => c.copy(opencv = true) )
+    opt[Unit]("replicated")
+      .text("whether replicate the hole data to all executors")
+      .action( (_, c) => c.copy(replicated = true) )
   }
 
   case class TestParams(
