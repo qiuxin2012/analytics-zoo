@@ -16,19 +16,23 @@
 
 package com.intel.analytics.zoo.examples.inception
 
+import java.net.URI
 import java.nio.ByteBuffer
 
+import com.intel.analytics.bigdl.dataset.DataSet.SeqFileFolder
 import com.intel.analytics.bigdl.dataset._
-import com.intel.analytics.bigdl.dataset.image.CropCenter
-import com.intel.analytics.bigdl.dataset.image.{BGRImgCropper, BGRImgNormalizer, BytesToBGRImg, MTLabeledBGRImgToBatch, HFlip => DatasetHFlip}
+import com.intel.analytics.bigdl.dataset.image.{BGRImgCropper, BGRImgNormalizer, BytesToBGRImg, CropCenter, MTLabeledBGRImgToBatch, HFlip => DatasetHFlip}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.transform.vision.image._
-import com.intel.analytics.bigdl.utils.{Engine, T}
+import com.intel.analytics.bigdl.utils.{Engine, RandomGenerator, T}
 import com.intel.analytics.zoo.feature.image._
 import com.intel.analytics.zoo.feature.{DistributedFeatureSet, FeatureSet}
 import com.intel.analytics.zoo.feature.pmem._
 import com.intel.analytics.zoo.pipeline.api.keras.layers.utils.EngineRef
-import org.apache.hadoop.io.Text
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.io.SequenceFile.Reader
+import org.apache.hadoop.io.{SequenceFile, Text}
 import org.apache.log4j.Logger
 import org.apache.spark.SparkContext
 
@@ -52,6 +56,30 @@ object ImageNet2012 {
       ByteRecord(image._2.copyBytes(), readLabel(image._1).toFloat)
     }).filter(_.label <= classNum)
     rawData
+  }
+
+  private[inception] def readFromSeqFilesReplicated(
+        url: String, sc: SparkContext, classNum: Int) = {
+    val nodeNumber = EngineRef.getNodeNumber()
+    val coreNumber = EngineRef.getCoreNumber()
+
+    val path = new Path(url)
+    val fs = FileSystem.get(path.toUri, new Configuration())
+    val fileNames = fs.listStatus(path).map(_.getPath().toUri)
+    val bcFileNames = sc.broadcast(fileNames)
+    val uris = sc.range(0, nodeNumber, 1, nodeNumber)
+      .coalesce(nodeNumber, true)
+      .mapPartitions{_ =>
+      Iterator.single(bcFileNames.value.clone())
+    }.flatMap(v => RandomGenerator.shuffle(v))
+      .cache().setName("cached uris")
+    uris.count()
+//    uris.map{uri =>
+//      val toByteRecord = SeqFileToBytes()
+//      toByteRecord(Iterator.single(uri))
+//    }
+    val toByteRecord = SeqFileToBytes()
+    toByteRecord.apply(uris)
   }
 
   /**
@@ -82,15 +110,21 @@ object ImageNet2012 {
     replicated: Boolean = false
   )
   : FeatureSet[MiniBatch[Float]] = {
-    val rep = if (replicated) REPLICATED else PARTITIONED
     if (opencvPreprocessing) {
       logger.info("Using opencv preprocessing for training set")
       opencv(path, sc, imageSize, batchSize,
-        nodeNumber, coresPerNode, classNumber, memoryType)
+        nodeNumber, coresPerNode, classNumber, memoryType, replicated)
     } else {
-      val rawData = readFromSeqFiles(path, sc, classNumber)
-        .setName("ImageNet2012 Training Set")
-      val featureSet = FeatureSet.rdd(rawData, memoryType = memoryType, rep)
+      val featureSet = if (replicated) {
+        logger.info("Replicated dataset")
+        val rawData = readFromSeqFilesReplicated(path, sc, classNumber)
+          .setName("Replicated ImageNet2012 Training Set")
+        FeatureSet.rdd(rawData, memoryType = memoryType, REPLICATED)
+      } else {
+        val rawData = readFromSeqFiles(path, sc, classNumber)
+          .setName("ImageNet2012 Training Set")
+        FeatureSet.rdd(rawData, memoryType = memoryType, PARTITIONED)
+      }
       featureSet.cache()
       featureSet.transform(
         MTLabeledBGRImgToBatch[ByteRecord](
@@ -126,11 +160,20 @@ object ImageNet2012 {
         nodeNumber: Int,
         coresPerNode: Int,
         classNumber: Int,
-        memoryType: MemoryType = DRAM): FeatureSet[MiniBatch[Float]] = {
-    val rawData = readFromSeqFiles(path, sc, classNumber)
-      .map(byteRecordToImageFeature(_))
-      .setName("ImageNet2012 Training Set")
-    val featureSet = FeatureSet.rdd(rawData, memoryType = memoryType, REPLICATED)
+        memoryType: MemoryType = DRAM,
+        replicated: Boolean = false): FeatureSet[MiniBatch[Float]] = {
+    val featureSet = if (replicated) {
+      logger.info("Replicated dataset")
+      val rawData = readFromSeqFilesReplicated(path, sc, classNumber)
+        .map(byteRecordToImageFeature(_))
+        .setName("Replicated ImageNet2012 Training Set")
+      FeatureSet.rdd(rawData, memoryType = memoryType, REPLICATED)
+    } else {
+      val rawData = readFromSeqFiles(path, sc, classNumber)
+        .map(byteRecordToImageFeature(_))
+        .setName("ImageNet2012 Training Set")
+      FeatureSet.rdd(rawData, memoryType = memoryType, PARTITIONED)
+    }
     val transformer = ImagePixelBytesToMat() ->
       ImageRandomCrop(imageSize, imageSize) ->
       ImageChannelNormalize(0.485f, 0.456f, 0.406f, 0.229f, 0.224f, 0.225f) ->
@@ -201,4 +244,75 @@ object ImageNet2012Val {
     featureSet.transform(transformer)
   }
 
+}
+
+object SeqFileToBytes {
+  def apply(): SeqFileToBytes = new SeqFileToBytes()
+  val logger = Logger.getLogger(this.getClass)
+}
+
+/**
+ * Read byte records from local hadoop sequence files.
+ */
+class SeqFileToBytes extends Transformer[URI, ByteRecord] {
+
+  @transient
+  private var key: Text = null
+
+  @transient
+  private var value: Text = null
+
+  @transient
+  private var reader: SequenceFile.Reader = null
+
+  @transient
+  private var oneRecordBuffer: ByteRecord = null
+
+  override def apply(prev: Iterator[URI]): Iterator[ByteRecord] = {
+    new Iterator[ByteRecord] {
+      override def next(): ByteRecord = {
+        if (oneRecordBuffer != null) {
+          val res = oneRecordBuffer
+          oneRecordBuffer = null
+          return res
+        }
+
+        if (key == null) {
+          key = new Text()
+        }
+        if (value == null) {
+          value = new Text
+        }
+        if (reader == null || !reader.next(key, value)) {
+          if (reader != null) {
+            reader.close()
+          }
+
+          val path = new Path(prev.next())
+          reader = new SequenceFile.Reader(new Configuration,
+            Reader.file(path))
+          SeqFileToBytes.logger.info(s"Loading ${path}")
+          reader.next(key, value)
+        }
+
+        ByteRecord(value.copyBytes(), SeqFileFolder.readLabel(key).toFloat)
+      }
+
+      override def hasNext: Boolean = {
+        if (oneRecordBuffer != null) {
+          true
+        } else if (reader == null) {
+          prev.hasNext
+        } else {
+          if (reader.next(key, value)) {
+            oneRecordBuffer = ByteRecord(value.copyBytes(),
+              SeqFileFolder.readLabel(key).toFloat)
+            return true
+          } else {
+            prev.hasNext
+          }
+        }
+      }
+    }
+  }
 }

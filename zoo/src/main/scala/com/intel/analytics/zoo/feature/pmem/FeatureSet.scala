@@ -215,7 +215,7 @@ object PmemFeatureSet {
     new CachedDistributedFeatureSet[T](arrayRDD.asInstanceOf[RDD[ArrayLike[T]]])
   }
 
-  private def rddIteratable[T: ClassTag](data: RDD[Iterable[T]],
+  private def rddIteratable[T: ClassTag](data: RDD[Iterator[T]],
                                nativeArrayConverter: NativeArrayConverter[T]):
   DistributedFeatureSet[T] = {
     val countPerPartition = data.map{ iterable =>
@@ -257,12 +257,12 @@ object PmemFeatureSet {
     }
   }
 
-  def rddIterable[T: ClassTag](data: RDD[Iterable[T]],
+  def rddIterator[T: ClassTag](data: RDD[Iterator[T]],
                        memoryType: MemoryType = PMEM): DistributedFeatureSet[T] = {
     var clazz: ClassTag[T] = implicitly[ClassTag[T]]
     implicitly[ClassTag[T]].runtimeClass match {
       case t if t == classOf[ByteRecord] =>
-        rddIteratable[ByteRecord](data.asInstanceOf[RDD[Iterable[ByteRecord]]],
+        rddIteratable[ByteRecord](data.asInstanceOf[RDD[Iterator[ByteRecord]]],
           new ByteRecordConverter(memoryType)).asInstanceOf[DistributedFeatureSet[T]]
       case _ =>
         throw new IllegalArgumentException(

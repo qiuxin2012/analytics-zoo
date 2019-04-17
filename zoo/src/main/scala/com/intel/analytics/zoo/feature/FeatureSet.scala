@@ -328,52 +328,46 @@ object FeatureSet {
             s"MemoryType: ${memoryType} is not supported at the moment")
       }
     } else {
-//      data.persist()
-      val nativeArrayConverter = implicitly[ClassTag[T]].runtimeClass match {
-        case t if t == classOf[ByteRecord] =>
-            new ByteRecordConverter(memoryType)
-        case _ =>
-          throw new IllegalArgumentException(
-            s"${implicitly[ClassTag[T]].runtimeClass} is not supported for now")
-      }
-      val countPerPartition = data.mapPartitions{records =>
-        val nativeArrayConverter = new ByteRecordConverter(memoryType)
-        var totalBytes: Long = 0L
-        var totalRecordNum = 0
-        records.foreach{ record =>
-          totalRecordNum += 1
-          totalBytes += nativeArrayConverter.getBytesPerRecord(record.asInstanceOf[ByteRecord])
-        }
-        Iterator.single(totalRecordNum, totalBytes)
-      }.reduce((a, b) => (a._1 + b._1, a._2 + b._2))
-      val replicatedData = data
-        .flatMap(v => Array.tabulate(nodeNumber)(i => (i, v)))
-        .coalesce(nodeNumber)
-        .groupByKey()
-        .map(v => v._2)
-      val featureSet = memoryType match {
-//        case DRAM =>
-//          DRAMFeatureSet.rdd(replicatedData)
+      val repartitionedData = data.coalesce(nodeNumber, false).setName(data.name)
+      memoryType match {
+        case DRAM =>
+          logger.info("~~~~~~~ Caching to DRAM With Replicated Partition ~~~~~~~")
+          DRAMFeatureSet.rdd(repartitionedData)
         case PMEM =>
           logger.info("~~~~~~~ Caching to AEP With Replicated Partition ~~~~~~~")
-          val arrayRDD = replicatedData.asInstanceOf[RDD[Iterable[ByteRecord]]].mapPartitions{dataIter =>
-            // Add a hooker to offset the pmem resource
-            Runtime.getRuntime().addShutdownHook(new Thread() {
-              override def run(): Unit = NativeArray.free()
-            })
-            nativeArrayConverter.toArray(dataIter.next(), Iterator.single(countPerPartition))
-          }.setName(s"FeatureSet: ${data.name} cached in PMEM")
-            .cache()
-          new CachedDistributedFeatureSet[T](arrayRDD.asInstanceOf[RDD[ArrayLike[T]]])
+          PmemFeatureSet.rdd(repartitionedData, PMEM)
         case DIRECT =>
           logger.info("~~~~~~~ Caching with DIRECT With Replicated Partition~~~~~~~")
-          PmemFeatureSet.rddIterable[T](replicatedData, DIRECT)
+          PmemFeatureSet.rdd[T](repartitionedData, DIRECT)
         case _ =>
           throw new IllegalArgumentException(
             s"MemoryType: ${memoryType} is not supported at the moment")
       }
-//      data.unpersist()
-      featureSet
+    }
+  }
+
+  def rddIterator[T: ClassTag](
+                          data: RDD[Iterator[T]],
+                          memoryType: MemoryType = DRAM,
+                          dataStrategy: DataStrategy = REPLICATED): DistributedFeatureSet[T] = {
+    val nodeNumber = EngineRef.getNodeNumber()
+    if (dataStrategy == PARTITIONED) {
+      val repartitionedData = data.coalesce(nodeNumber, true).setName(data.name)
+      memoryType match {
+        case _ =>
+          throw new IllegalArgumentException(
+            s"MemoryType: ${memoryType} is not supported at the moment")
+      }
+    } else {
+      val repartitionedData = data.coalesce(nodeNumber, false).setName(data.name)
+      memoryType match {
+        case PMEM =>
+          logger.info("~~~~~~~ Caching to AEP With Replicated Partition ~~~~~~~")
+          PmemFeatureSet.rddIterator(repartitionedData, PMEM)
+        case _ =>
+          throw new IllegalArgumentException(
+            s"MemoryType: ${memoryType} is not supported at the moment")
+      }
     }
   }
 }
