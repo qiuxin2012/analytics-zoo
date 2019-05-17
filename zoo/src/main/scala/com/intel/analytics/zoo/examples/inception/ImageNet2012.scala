@@ -30,9 +30,10 @@ import com.intel.analytics.zoo.feature.{DistributedFeatureSet, FeatureSet}
 import com.intel.analytics.zoo.feature.pmem._
 import com.intel.analytics.zoo.pipeline.api.keras.layers.utils.EngineRef
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.io.SequenceFile.Reader
 import org.apache.hadoop.io.{SequenceFile, Text}
+import org.apache.hadoop.mapred.{FileSplit, SequenceFileInputFormat, SequenceFileRecordReader}
 import org.apache.log4j.Logger
 import org.apache.spark.SparkContext
 
@@ -65,13 +66,39 @@ object ImageNet2012 {
 
     val path = new Path(url)
     val fs = FileSystem.get(path.toUri, new Configuration())
-    val fileNames = fs.listStatus(path).map(_.getPath().toUri)
+    val fileNames = fs.listStatus(path).map(v => (v.getPath.toUri, v.getBlockSize, v.getLen))
     val bcFileNames = sc.broadcast(fileNames)
     val uris = sc.range(0, nodeNumber, 1, nodeNumber)
       .coalesce(nodeNumber, true)
       .mapPartitions{_ =>
       Iterator.single(bcFileNames.value.clone())
-    }.flatMap(v => RandomGenerator.shuffle(v))
+    }.flatMap(v => RandomGenerator.shuffle(v)).
+      flatMap{v =>
+//      map{v =>
+        val uri = v._1
+        val blockSize = v._2
+        val fileLength = v._3
+        val fileNum = Math.floor(fileLength.toDouble / blockSize).toLong
+//      val conf = new Configuration()
+
+//      val inputFormat = new SequenceFileInputFormat[Text, Text]()
+//      inputFormat.getSplits(conf, fileNum.toInt)
+        val splits = Array.tabulate(fileNum.toInt)(i =>
+//          if(i != fileNum - 1) {
+            new FileSplit(new Path(uri), i * blockSize, blockSize, Array[String]())
+//          } else {
+//            new FileSplit(file.getPath, i * file.getBlockSize, file.getBlockSize)
+//          }
+        )
+        if(fileLength % blockSize == 0) {
+          splits
+        } else {
+          splits ++
+            Array(new FileSplit(new Path(uri), fileNum * blockSize,
+             fileLength - fileNum * blockSize, Array[String]()))
+        }
+//        new FileSplit(new Path(uri), 0, fileLength, Array[String]())
+      }
       .cache().setName("cached uris")
     uris.count()
 //    uris.map{uri =>
@@ -79,7 +106,27 @@ object ImageNet2012 {
 //      toByteRecord(Iterator.single(uri))
 //    }
     val toByteRecord = SeqFileToBytes()
-    toByteRecord.apply(uris)
+    val result = toByteRecord.apply(uris)
+    logger.info(uris.map{uri =>
+      val toByteRecord = SeqFileToBytes()
+      toByteRecord.apply(Iterator.single(uri))
+    }.mapPartitions{v =>
+      val iteratorArray = v.toArray
+      val nativeArrayConverter = iteratorArray.map(iter =>
+        (iter, new ByteRecordConverter())).par
+      val record = nativeArrayConverter.map{v =>
+        var totalBytes: Long = 0L
+        var totalRecordNum = 0L
+        v._1.foreach{ record =>
+          totalRecordNum += 1
+          totalBytes += v._2.getBytesPerRecord(record)
+        }
+        (totalRecordNum, totalBytes)
+      }
+      record.toIterator
+    }.reduce((a, b) => (a._1 + b._1, a._2 + b._2)))
+    result.count()
+    result
   }
 
   /**
@@ -116,7 +163,8 @@ object ImageNet2012 {
         nodeNumber, coresPerNode, classNumber, memoryType, replicated)
     } else {
       val featureSet = if (replicated) {
-        logger.info("Replicated dataset")
+        logger.info("Replicated dataset  aaa")
+        println(readFromSeqFiles(path, sc, classNumber).count())
         val rawData = readFromSeqFilesReplicated(path, sc, classNumber)
           .setName("Replicated ImageNet2012 Training Set")
         FeatureSet.rdd(rawData, memoryType = memoryType, REPLICATED)
@@ -254,7 +302,7 @@ object SeqFileToBytes {
 /**
  * Read byte records from local hadoop sequence files.
  */
-class SeqFileToBytes extends Transformer[URI, ByteRecord] {
+class SeqFileToBytes extends Transformer[FileSplit, ByteRecord] {
 
   @transient
   private var key: Text = null
@@ -263,12 +311,12 @@ class SeqFileToBytes extends Transformer[URI, ByteRecord] {
   private var value: Text = null
 
   @transient
-  private var reader: SequenceFile.Reader = null
+  private var reader: SequenceFileRecordReader[Text, Text] = null
 
   @transient
   private var oneRecordBuffer: ByteRecord = null
 
-  override def apply(prev: Iterator[URI]): Iterator[ByteRecord] = {
+  override def apply(prev: Iterator[FileSplit]): Iterator[ByteRecord] = {
     new Iterator[ByteRecord] {
       override def next(): ByteRecord = {
         if (oneRecordBuffer != null) {
@@ -288,10 +336,13 @@ class SeqFileToBytes extends Transformer[URI, ByteRecord] {
             reader.close()
           }
 
-          val path = new Path(prev.next())
-          reader = new SequenceFile.Reader(new Configuration,
-            Reader.file(path))
-          SeqFileToBytes.logger.info(s"Loading ${path}")
+          val path = prev.next()
+          SeqFileToBytes.logger.info(s"Loading ${path.getPath}:${path.getStart}+${path.getLength}")
+          reader = new SequenceFileRecordReader[Text, Text](new Configuration(), path)
+//            new SequenceFile.Reader(new Configuration,
+//            Reader.file(path.getPath),
+//            Reader.bufferSize(10485760))
+
           reader.next(key, value)
         }
 

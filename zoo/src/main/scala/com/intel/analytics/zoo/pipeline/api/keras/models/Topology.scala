@@ -985,7 +985,8 @@ private[zoo] class InternalDistriOptimizer[T: ClassTag] (
         endTrigger: Option[Trigger] = None,
         checkPointTrigger: Option[Trigger] = None,
         validationSet: FeatureSet[MiniBatch[T]] = null,
-        validationMethod: Array[ValidationMethod[T]] = null): this.type = {
+        validationMethod: Array[ValidationMethod[T]] = null,
+        gradientL2Norm: Double = 0.0): this.type = {
     this.dataset = trainSet.toDataSet()
     val endWhen = if (endTrigger.isDefined) {
       endTrigger.get
@@ -1004,6 +1005,9 @@ private[zoo] class InternalDistriOptimizer[T: ClassTag] (
     }
     if (checkPointTrigger.isDefined && validationMethod != null && validationSet != null) {
       this.setValidation(checkPointTrigger.get, validationSet.toDataSet(), validationMethod)
+    }
+    if (gradientL2Norm > 0.0) {
+      this.setGradientClippingByl2Norm(gradientL2Norm)
     }
     this.optimize()
     this

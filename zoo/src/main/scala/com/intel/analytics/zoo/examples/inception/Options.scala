@@ -36,7 +36,7 @@ object Options {
     graphModel: Boolean = false,
     maxLr: Option[Double] = None,
     warmupEpoch: Option[Int] = None,
-    gradientL2NormThreshold: Option[Double] = None,
+    gradientL2NormThreshold: Double = 0.0,
     gradientMin: Option[Double] = None,
     gradientMax: Option[Double] = None,
     memoryType: String = "DRAM",
@@ -94,7 +94,7 @@ object Options {
       .action((x, c) => c.copy(warmupEpoch = Some(x)))
     opt[Double]("gradientL2NormThreshold")
       .text("gradient L2-Norm threshold")
-      .action((x, c) => c.copy(gradientL2NormThreshold = Some(x)))
+      .action((x, c) => c.copy(gradientL2NormThreshold = x))
     opt[Double]("gradientMax")
       .text("max gradient clipping by")
       .action((x, c) => c.copy(gradientMax = Some(x)))

@@ -34,7 +34,8 @@ trait AbstractEstimator[T]{
             endTrigger: Option[Trigger] = None,
             checkPointTrigger: Option[Trigger] = None,
             validationSet: FeatureSet[MiniBatch[T]] = null,
-            validationMethod: Array[ValidationMethod[T]] = null): this.type
+            validationMethod: Array[ValidationMethod[T]] = null,
+            gradientL2Norm: Double = 0.0): this.type
 
   def evaluate(validationSet: FeatureSet[MiniBatch[T]],
                validationMethod: Array[ValidationMethod[T]]
@@ -79,7 +80,8 @@ class Estimator[T: ClassTag] private[zoo](
             endTrigger: Option[Trigger] = None,
             checkPointTrigger: Option[Trigger] = None,
             validationSet: FeatureSet[MiniBatch[T]] = null,
-            validationMethod: Array[ValidationMethod[T]] = null): this.type = {
+            validationMethod: Array[ValidationMethod[T]] = null,
+            gradientL2Norm: Double = 0.0): this.type = {
     if (internalEstimator == null) {
       internalEstimator = trainSet match {
         case d: DistributedFeatureSet[MiniBatch[T]] =>
@@ -90,7 +92,7 @@ class Estimator[T: ClassTag] private[zoo](
       }
     }
     internalEstimator.train(trainSet, criterion, endTrigger, checkPointTrigger,
-      validationSet, validationMethod)
+      validationSet, validationMethod,  gradientL2Norm)
     this
   }
 
