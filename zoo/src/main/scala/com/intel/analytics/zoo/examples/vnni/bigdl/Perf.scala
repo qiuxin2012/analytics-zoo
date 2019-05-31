@@ -51,37 +51,10 @@ object Perf {
 
     parser.parse(args, PerfParams()).foreach { param =>
       val batchSize = param.batchSize
-      val batchInput = Tensor(Array(batchSize, 3, 224, 224)).rand()
-      val singleInput = Tensor(Array(1, 3, 224, 224)).rand()
       Engine.init
 
       val model = ImageClassifier.loadModel[Float](param.model)
       model.setEvaluateStatus()
-
-      var iteration = 0
-      while (iteration < param.iteration) {
-        val start = System.nanoTime()
-        model.forward(batchInput)
-        val timeUsed = System.nanoTime() - start
-        val throughput = "%.2f".format(batchSize.toFloat / (timeUsed / 1e9))
-        logger.info(s"Iteration $iteration, batch $batchSize, takes $timeUsed ns, " +
-          s"throughput is $throughput imgs/sec")
-        iteration += 1
-      }
-
-      // mkldnn model would forward a fixed batch size.
-      // Thus need a new model to test for latency.
-      val model2 = ImageClassifier.loadModel[Float](param.model)
-      model2.setEvaluateStatus()
-
-      iteration = 0
-      while (iteration < param.iteration) {
-        val start = System.nanoTime()
-        model2.forward(singleInput)
-        val latency = System.nanoTime() - start
-        logger.info(s"Iteration $iteration, latency for a single image is ${latency / 1e6} ms")
-        iteration += 1
-      }
 
       val inputTensor = Tensor[Float](64, 3, 224, 224).rand(-1, 1)
       var i = 0
@@ -94,7 +67,6 @@ object Perf {
         i += 1
       }
 
-      Iterator.single(1)
     }
   }
 }

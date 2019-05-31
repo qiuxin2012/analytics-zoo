@@ -27,7 +27,6 @@ import com.intel.analytics.zoo.examples.streaming.objectdetection.StreamingObjec
 import com.intel.analytics.zoo.feature.image._
 import com.intel.analytics.zoo.models.image.common.ImageModel
 import com.intel.analytics.zoo.models.image.imageclassification.{ImageClassifier, LabelOutput}
-import com.intel.analytics.zoo.app.ImageProcessing
 import com.intel.analytics.zoo.feature.image
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.streaming.{Seconds, StreamingContext}

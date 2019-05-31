@@ -17,9 +17,10 @@
 package com.intel.analytics.zoo.examples.vnni.bigdl
 
 import com.intel.analytics.bigdl.models.utils.ModelBroadcast
-import com.intel.analytics.bigdl.nn.{Module}
+import com.intel.analytics.bigdl.nn.Module
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.utils.Engine
+import com.intel.analytics.zoo.models.image.imageclassification.ImageClassifier
 import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
 import org.apache.spark.SparkContext
@@ -84,8 +85,19 @@ object CaffeInfDemo {
 //    image.count()
 //    println(s"cache path cost ${(System.nanoTime() - cachePathTime) / 1e9}")
 
-    val image = sc.range(1, 1000, 1).map(i =>
-      (Tensor[Float](3, 224, 224).rand(), i.toString))
+    val image = sc.range(1, 40000, 1, 1).map(i =>
+      (Tensor[Float](3, 224, 224).rand(), i.toString)).mapPartitions{iter =>
+      val batchsize = params.batchSize
+      iter.grouped(batchsize).toParArray.map{ batch =>
+        val inputTensor = Tensor[Float](batchsize, 3, 224, 224)
+        val size = batch.size
+        (0 until size).foreach { i =>
+          inputTensor.select(1, i + 1).copy(batch(i)._1)
+        }
+        (inputTensor, batch.map(_._2))
+      }.toIterator
+    }
+    image.cache().count()
     val batchsize = params.batchSize
 
 //    val model = new InferenceModel()
@@ -113,42 +125,38 @@ object CaffeInfDemo {
 //      .filter(_.getParameterTypes.size == 4)(0)
 //    val model = m.invoke(clazz, caffeModel, Boolean.box(true), ClassTag.Float,
 //      TensorNumeric.NumericFloat).asInstanceOf[Module[Float]]
-     val model = Module.loadModule[Float](params.modelPath)
+//     val model = Module.loadModule[Float](params.modelPath)
+    val model = ImageClassifier.loadModel[Float](params.modelPath)
+    model.setEvaluateStatus()
+
+//    val inputTensor = Tensor[Float](64, 3, 224, 224).rand(-1, 1)
+//    var i = 0
+//    while (i < 1000) {
+//      val start = System.nanoTime()
+//      model.forward(inputTensor)
+//      val end = System.nanoTime()
+//
+//      println(s"elapsed ${(end - start) / 1e9}")
+//      i += 1
+//    }
 
 
     val s = System.nanoTime()
     val bcModel = ModelBroadcast[Float]().broadcast(sc, model)
     val res = image.mapPartitions{imageTensor =>
       val localModel = bcModel.value()
-      println("clone clone clone")
-
-      val inputTensor = Tensor[Float](batchsize, 3, 224, 224).rand(-1, 1)
-      var i = 0
-      while (i < 1000) {
+      imageTensor.map{batch =>
+        val inputTensor = batch._1
+        val size = batch._2.size
         val start = System.nanoTime()
-        localModel.forward(inputTensor)
+        val output = localModel.forward(inputTensor).toTensor[Float]
         val end = System.nanoTime()
-
-        println(s"elapsed ${(end - start) / 1e9}")
-        i += 1
+        logger.info(s"elapsed ${(end - start) / 1e9} s")
+        (0 until size).map{i =>
+          (batch._2(i), output.valueAt(i + 1, 1),
+            output.valueAt(i + 1, 2))
+        }
       }
-
-      Iterator.single(1)
-//      val inputTensor = Tensor[Float](batchsize, 3, 224, 224)
-//      imageTensor.grouped(batchsize).flatMap{batch =>
-//        val size = batch.size
-//        (0 until size).foreach{i =>
-//          inputTensor.select(1, i + 1).copy(batch(i)._1)
-//        }
-//        val start = System.nanoTime()
-//        val output = localModel.forward(inputTensor).toTensor[Float]
-//        val end = System.nanoTime()
-//        logger.info(s"elapsed ${(end - start) / 1e9} s")
-//        (0 until size).map{i =>
-//          (batch(i)._2, output.valueAt(i + 1, 1),
-//            output.valueAt(i + 1, 2))
-//        }
-//      }
     }.collect()
 //    val inputTensor = Tensor[Float](batchsize, 3, 224, 224)
 //    image.collect().grouped(batchsize).foreach{batch =>
