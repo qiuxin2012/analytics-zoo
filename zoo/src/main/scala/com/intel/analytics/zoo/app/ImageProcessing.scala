@@ -68,8 +68,7 @@ class ImageProcessing {
     val (height, width, channel) = (mat.height(), mat.width(), mat.channels())
     val data = new Array[Float](height * width * channel)
     OpenCVMat.toFloatPixels(mat, data)
-    val imageTensor: Tensor[Float] = Tensor[Float]()
-    imageTensor.resize(channel, height, width)
+    val imageTensor: Tensor[Float] = Tensor[Float](channel, height, width)
     val storage = imageTensor.storage().array()
     imageTensor.transpose(1, 2).transpose(2, 3)
     val offset = 0
