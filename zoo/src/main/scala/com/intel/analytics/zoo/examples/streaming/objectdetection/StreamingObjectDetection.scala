@@ -31,7 +31,7 @@ object StreamingObjectDetection {
   Logger.getLogger("org").setLevel(Level.ERROR)
   Logger.getLogger("akka").setLevel(Level.ERROR)
   Logger.getLogger("breeze").setLevel(Level.ERROR)
-  Logger.getLogger("com.intel.analytics.zoo").setLevel(Level.INFO)
+  Logger.getLogger("com.intel.analytics.zoo").setLevel(Level.ERROR)
   Logger.getLogger("com.intel.analytics.zoo.feature.image").setLevel(Level.ERROR)
 
   val logger = Logger.getLogger(getClass)

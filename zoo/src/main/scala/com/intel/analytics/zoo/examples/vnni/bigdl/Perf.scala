@@ -82,6 +82,19 @@ object Perf {
         logger.info(s"Iteration $iteration, latency for a single image is ${latency / 1e6} ms")
         iteration += 1
       }
+
+      val inputTensor = Tensor[Float](64, 3, 224, 224).rand(-1, 1)
+      var i = 0
+      while (i < 1000) {
+        val start = System.nanoTime()
+        model.forward(inputTensor)
+        val end = System.nanoTime()
+
+        println(s"elapsed ${(end - start) / 1e9}")
+        i += 1
+      }
+
+      Iterator.single(1)
     }
   }
 }

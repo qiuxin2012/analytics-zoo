@@ -16,10 +16,12 @@
 
 package com.intel.analytics.zoo.models.image.imageclassification
 
+import com.intel.analytics.bigdl.nn.{Graph, Module}
+
 import scala.reflect.ClassTag
 import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, Activity}
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.zoo.models.image.common.ImageModel
+import com.intel.analytics.zoo.models.image.common.{ImageConfigure, ImageModel}
 
 /**
  * An Image Classification model.
@@ -48,6 +50,17 @@ object ImageClassifier {
   def loadModel[T: ClassTag](path: String, weightPath: String = null)
                             (implicit ev: TensorNumeric[T]): ImageClassifier[T] = {
     ImageModel.loadModel(path, weightPath, "imageclassification").asInstanceOf[ImageClassifier[T]]
+  }
+  def loadCaffeModel[T: ClassTag](defPath: String = null, weightPath: String = null)
+                                 (implicit ev: TensorNumeric[T]): ImageClassifier[T] = {
+    val caffeModel = Module.loadCaffeModel(defPath, weightPath)
+    val g = caffeModel.asInstanceOf[Graph[Float]]
+    val model = new ImageClassifier[T]().addModel(caffeModel)
+    val modelName = caffeModel.getName()
+    model.setName(modelName)
+//    model.config = ImageConfigure.parse(modelName)
+    model.config = ImageConfigure.parse("analytics-zoo_resnet-50_imagenet_0.5.0")
+    model
   }
 
 }

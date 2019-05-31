@@ -23,7 +23,7 @@ import com.intel.analytics.zoo.feature.common.{ChainedPreprocessing, Preprocessi
 abstract class ImageProcessing extends FeatureTransformer with
    Preprocessing[ImageFeature, ImageFeature] {
   // scalastyle:off methodName
-  // scalastyle:off noSpaceBeforeLeftBracket
+  // scalastyle:off noSpacezBeforeLeftBracket
   def -> (other: ImageProcessing): ImageProcessing = {
     new ChainedImageProcessing(this, other)
   }

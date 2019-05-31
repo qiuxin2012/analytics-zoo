@@ -16,7 +16,10 @@
 
 package com.intel.analytics.zoo.examples.vnni.bigdl
 
+import com.intel.analytics.bigdl.dataset.DistributedDataSet
+import com.intel.analytics.bigdl.models.utils.ModelBroadcast
 import com.intel.analytics.bigdl.optim.{Top1Accuracy, Top5Accuracy}
+import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric._
 import com.intel.analytics.bigdl.utils.LoggerFilter
 import com.intel.analytics.zoo.common.NNContext
@@ -55,9 +58,9 @@ object ImageNetEvaluation {
     parser.parse(args, ImageNetEvaluationParams()).map(param => {
       val sc = NNContext.initNNContext("ImageNet evaluation example with int8 quantized model")
       val images = ImageSet.readSequenceFiles(param.folder, sc, param.partitionNum)
-      // If the actual partitionNum of sequence files is too large, then the
-      // total batchSize we calculate (partitionNum * batchPerPartition) would be
-      // too large for inference.
+//       If the actual partitionNum of sequence files is too large, then the
+//       total batchSize we calculate (partitionNum * batchPerPartition) would be
+//       too large for inference.
       // mkldnn runs a single model and single partition on a single node.
       if (images.rdd.partitions.length > param.partitionNum) {
         images.rdd = images.rdd.coalesce(param.partitionNum, shuffle = false)
@@ -68,6 +71,47 @@ object ImageNetEvaluation {
         Array(new Top1Accuracy[Float], new Top5Accuracy[Float]))
       result.foreach(r => println(s"${r._2} is ${r._1}"))
       logger.info("Evaluation finished.")
+
+
+      val image = sc.range(1, 1000, 1).map(i =>
+        (Tensor[Float](3, 224, 224).rand(), i.toString))
+
+      val batchsize = 64
+      val bcModel = ModelBroadcast[Float]().broadcast(sc, model)
+      val res = image.mapPartitions{imageTensor =>
+        val localModel = bcModel.value()
+        println("clone clone clone")
+
+        val inputTensor = Tensor[Float](batchsize, 3, 224, 224).rand(-1, 1)
+        var i = 0
+        while (i < 1000) {
+          val start = System.nanoTime()
+          localModel.forward(inputTensor)
+          val end = System.nanoTime()
+
+          println(s"elapsed ${(end - start) / 1e9}")
+          i += 1
+        }
+
+        Iterator.single(1)
+        //      val inputTensor = Tensor[Float](batchsize, 3, 224, 224)
+        //      imageTensor.grouped(batchsize).flatMap{batch =>
+        //        val size = batch.size
+        //        (0 until size).foreach{i =>
+        //          inputTensor.select(1, i + 1).copy(batch(i)._1)
+        //        }
+        //        val start = System.nanoTime()
+        //        val output = localModel.forward(inputTensor).toTensor[Float]
+        //        val end = System.nanoTime()
+        //        logger.info(s"elapsed ${(end - start) / 1e9} s")
+        //        (0 until size).map{i =>
+        //          (batch(i)._2, output.valueAt(i + 1, 1),
+        //            output.valueAt(i + 1, 2))
+        //        }
+        //      }
+      }.collect()
+
+
       sc.stop()
     })
   }

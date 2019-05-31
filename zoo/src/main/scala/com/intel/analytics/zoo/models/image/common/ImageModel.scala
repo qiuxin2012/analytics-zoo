@@ -35,7 +35,7 @@ import scala.reflect.ClassTag
 abstract class ImageModel[T: ClassTag]()(implicit ev: TensorNumeric[T])
   extends ZooModel[Activity, Activity, T] {
 
-  private var config: ImageConfigure[T] = null
+  protected var config: ImageConfigure[T] = null
 
   /**
    * Computes the output using the current parameter set of the class and input. This function
@@ -132,6 +132,7 @@ object ImageModel {
       logger.info("Loading an int8 convertible model. " +
         "Quantize to an int8 model for better performance")
       labor.quantize()
+//      labor
     } else labor
     val imageModel = if (model.isInstanceOf[ImageModel[T]]) {
       model.asInstanceOf[ImageModel[T]]
