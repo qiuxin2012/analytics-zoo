@@ -18,9 +18,12 @@ package com.intel.analytics.zoo.examples.vnni.bigdl
 
 import java.io.{File, PrintWriter}
 
+import com.intel.analytics.bigdl.Module
 import com.intel.analytics.bigdl.models.utils.ModelBroadcast
+import com.intel.analytics.bigdl.nn.Module
 import com.intel.analytics.bigdl.tensor.Tensor
-import com.intel.analytics.bigdl.utils.Engine
+import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
+import com.intel.analytics.bigdl.utils.{Engine, MklBlas, MklDnn}
 import com.intel.analytics.zoo.app.ImageProcessing
 import com.intel.analytics.zoo.models.image.imageclassification.ImageClassifier
 import com.intel.analytics.zoo.pipeline.api.keras.layers.utils.EngineRef
@@ -28,6 +31,8 @@ import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+
+import scala.reflect.ClassTag
 
 object CaffeInfDemo {
   Logger.getLogger("org").setLevel(Level.ERROR)
@@ -46,7 +51,6 @@ object CaffeInfDemo {
     opt[String]('d', "defPath")
       .text("folder that used to store the streaming paths")
       .action((x, c) => c.copy(defPath = x))
-      .required()
     opt[String]('o', "outputPath")
       .text("where you put the output data")
       .action((x, c) => c.copy(outputPath = x))
@@ -64,13 +68,15 @@ object CaffeInfDemo {
       .action((x, c) => c.copy(batchSize = x))
   }
 
-  def read(sc: SparkContext, inputPath: String): RDD[(Tensor[Float], String)] = {
+  def read(sc: SparkContext,
+           inputPath: String,
+           numP: Int = 1): RDD[(Tensor[Float], String)] = {
     val coreNumber = EngineRef.getCoreNumber()
     val imgPath123 = sc.textFile(inputPath,
-      1).map(_.trim())
+      numP).map(_.trim())
       .filter(_.size > 0).cache()
     imgPath123.count()
-    val imgPath = imgPath123.coalesce(1).cache()
+    val imgPath = imgPath123.coalesce(numP).cache()
 
     imgPath.count()
     val cachePathTime = System.nanoTime()
@@ -89,6 +95,27 @@ object CaffeInfDemo {
     image
   }
 
+  def convert[T: ClassTag](args: Object*)(
+    implicit ev: TensorNumeric[T]): Module[T] = {
+    val obj = "com.intel.analytics.bigdl.utils.intermediate.ConversionUtils"
+    val methodName = "convert"
+    val clazz = Class.forName(obj)
+    val argsWithTag = args ++ Seq(implicitly[reflect.ClassTag[T]], ev)
+    val method =
+      try {
+        clazz.getMethod(methodName, argsWithTag.map(_.getClass): _*)
+      } catch {
+        case t: Throwable =>
+          val methods = clazz.getMethods().filter(_.getName() == methodName)
+              .filter(_.getParameterCount == argsWithTag.size)
+          require(methods.length == 1,
+            s"We should only found one result, but got ${methodName}: ${methods.length}")
+          methods(0)
+      }
+    method.invoke(obj, argsWithTag: _*).asInstanceOf[Module[T]]
+  }
+
+
   def main(args: Array[String]): Unit = {
     val params = parser.parse(args, Param()).get
 //    val sc = NNContext.initNNContext("Caffe Test")
@@ -97,11 +124,20 @@ object CaffeInfDemo {
     val sc = new SparkContext(conf)
     Engine.init
     val batchsize = params.batchSize
+    val numberOfPartiton = EngineRef.getEngineType() match {
+      case MklDnn => EngineRef.getNodeNumber()
+      case MklBlas => EngineRef.getCoreNumber() * EngineRef.getNodeNumber()
+    }
 
-    val image = read(sc, params.inputPath)
+    val image = read(sc, params.inputPath, numberOfPartiton)
 
-    val model = ImageClassifier.loadModel[Float](params.modelPath)
-    model.setEvaluateStatus()
+    val model = if (params.defPath != "") {
+      val loadedModel = Module.loadCaffeModel[Float](params.defPath, params.modelPath).toGraph()
+      convert[Float](loadedModel, Boolean.box(false))
+    } else {
+      val loadedModel = Module.loadModule[Float](params.modelPath).toGraph()
+      convert[Float](loadedModel, Boolean.box(false))
+    }
 
     val s = System.nanoTime()
     val bcModel = ModelBroadcast[Float]().broadcast(sc, model)
