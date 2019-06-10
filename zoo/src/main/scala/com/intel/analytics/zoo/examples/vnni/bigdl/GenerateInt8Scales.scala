@@ -57,12 +57,7 @@ object GenerateInt8Scales {
       val defPath = param.model + "/deploy_overlap.prototxt"
       val modelPath = param.model + "/bvlc.caffemodel"
 
-      val model = Module.loadCaffeModel[Float](defPath, modelPath).toGraph()
-      val p = model.getParametersTable()
-      val model2 = Module.loadModule[Float](
-        "/home/xin/Downloads/analytics-zoo_resnet-50_imagenet_0.1.0.model")
-      val p2 = model2.getParametersTable()
-      println(p.keySet.equals(p2.keySet))
+      val model = CaffeInfDemo.caffe2zoo(Module.loadCaffeModel[Float](defPath, modelPath)).toGraph()
       genereateInt8Scales(model, param.model, dataset.toDistributed().data(false))
       saveQuantizedModel(model, param.model)
     }
