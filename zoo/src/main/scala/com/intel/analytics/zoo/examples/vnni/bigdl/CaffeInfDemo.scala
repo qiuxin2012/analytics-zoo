@@ -123,7 +123,7 @@ object CaffeInfDemo {
 
   def caffe2zoo(model: Module[Float]): Module[Float] = {
     val newModel =
-      graph(2, T("depth" -> 50, "shortcutType" -> ShortcutType.B, "dataSet" -> ImageNet,
+      resnet50(2, T("depth" -> 50, "shortcutType" -> ShortcutType.B, "dataSet" -> ImageNet,
         "optnet" -> false))
 
     val pt = model.getParametersTable()
@@ -186,7 +186,8 @@ object CaffeInfDemo {
         }
         logger.info(s"Copy elapsed ${(System.nanoTime() - startCopy) / 1e9} s")
         val start = System.nanoTime()
-        val output = localModel.forward(inputTensor).toTensor[Float]
+        val o1 = localModel.forward(inputTensor)
+        val output = o1.toTensor[Float]
         val end = System.nanoTime()
         logger.info(s"elapsed ${(end - start) / 1e9} s")
         (0 until size).map{i =>
@@ -209,75 +210,76 @@ object CaffeInfDemo {
   }
 
   var iChannels = 0
-  def graph(classNum: Int, opt: Table): Module[Float] = {
+  def resnet50(classNum: Int, opt: Table): Module[Float] = {
     val depth = opt.get("depth").getOrElse(18)
     val shortCutType = opt.get("shortcutType")
     val shortcutType = shortCutType.getOrElse(ShortcutType.B).asInstanceOf[ShortcutType]
-    val dataset = opt.getOrElse("dataSet", DatasetType.CIFAR10).asInstanceOf[DatasetType]
+    val dataSet = opt.getOrElse[DatasetType]("dataSet", DatasetType.CIFAR10)
     val optnet = opt.get("optnet").getOrElse(true)
 
-    def shortcutFunc(nInputPlane: Int, nOutputPlane: Int, stride: Int, input: ModuleNode[Float],
-                     name: String)
-    : ModuleNode[Float] = {
+    def shortcut(nInputPlane: Int, nOutputPlane: Int, stride: Int,
+                name: String): Module[Float] = {
       val useConv = shortcutType == ShortcutType.C ||
         (shortcutType == ShortcutType.B && nInputPlane != nOutputPlane)
 
       if (useConv) {
-        val conv1 = Convolution(nInputPlane, nOutputPlane, 1, 1, stride, stride,
-          optnet = optnet).setName(s"res${name}_branch1").inputs(input)
-        val bn1 = Sbn(nOutputPlane).setName(s"bn${name}_branch1").inputs(conv1)
-        bn1
+        Sequential()
+          .add(Convolution(nInputPlane, nOutputPlane, 1, 1, stride, stride, optnet = optnet)
+          .setName(s"res${name}_branch1"))
+          .add(Sbn(nOutputPlane).setName(s"bn${name}_branch1"))
       } else if (nInputPlane != nOutputPlane) {
-        val pool1 = SpatialAveragePooling(1, 1, stride, stride).inputs(input)
-        val mul1 = MulConstant(0f).inputs(pool1)
-        val concat = JoinTable(2, 0).inputs(pool1, mul1)
-        concat
+        Sequential()
+          .add(SpatialAveragePooling(1, 1, stride, stride))
+          .add(Concat(2)
+            .add(Identity())
+            .add(MulConstant(0f)))
       } else {
-        input
+        Identity()
       }
     }
 
-    def bottleneckFunc(n: Int, stride: Int, input: ModuleNode[Float], name: String): ModuleNode[Float] = {
+    def bottleneck(n: Int, stride: Int,
+                   name: String): Module[Float] = {
       val nInputPlane = iChannels
       iChannels = n * 4
 
-      val conv1 = Convolution(nInputPlane, n, 1, 1, 1, 1, 0, 0, optnet = optnet)
-        .setName(s"res${name}_branch2a").inputs(input)
-      val bn1 = Sbn(n).setName(s"bn${name}_branch2a").inputs(conv1)
-      val relu = ReLU(true).setName(s"res${name}_branch2a_relu").inputs(bn1)
-      val conv2 = Convolution(n, n, 3, 3, stride, stride, 1, 1, optnet = optnet)
-        .setName(s"res${name}_branch2b").inputs(relu)
-      val bn2 = Sbn(n).setName(s"bn${name}_branch2b").inputs(conv2)
-      val relu2 = ReLU(true).setName(s"res${name}_branch2b_relu").inputs(bn2)
-      val conv3 = Convolution(n, n*4, 1, 1, 1, 1, 0, 0, optnet = optnet)
-        .setName(s"res${name}_branch2c").inputs(relu2)
-      val sbn = Sbn(n * 4).setInitMethod(Zeros, Zeros).setName(s"bn${name}_branch2c").inputs(conv3)
-
-      val shortcut = shortcutFunc(nInputPlane, n * 4, stride, input, name)
-      val add = CAddTable(true).setName(s"res${name}").inputs(shortcut, sbn)
-      val output = ReLU(true).setName(s"res${name}_relu").inputs(add)
-      output
+      val s = Sequential()
+      s.add(Convolution(nInputPlane, n, 1, 1, 1, 1, 0, 0, optnet = optnet).setName(s"res${name}_branch2a"))
+        .add(Sbn(n).setName(s"bn${name}_branch2a"))
+        .add(ReLU(true).setName(s"res${name}_branch2a_relu"))
+        .add(Convolution(n, n, 3, 3, stride, stride, 1, 1, optnet = optnet).setName(s"res${name}_branch2b"))
+        .add(Sbn(n).setName(s"bn${name}_branch2b"))
+        .add(ReLU(true).setName(s"res${name}_branch2b_relu"))
+        .add(Convolution(n, n*4, 1, 1, 1, 1, 0, 0, optnet = optnet).setName(s"res${name}_branch2c"))
+        .add(Sbn(n * 4).setInitMethod(Zeros, Zeros).setName(s"bn${name}_branch2c"))
+      Sequential()
+        .add(ConcatTable()
+          .add(s)
+          .add(shortcut(nInputPlane, n*4, stride, name)))
+        .add(CAddTable(true).setName(s"res${name}"))
+        .add(ReLU(true).setName(s"res${name}_relu"))
     }
 
-    def layer(block: (Int, Int, ModuleNode[Float], String) => ModuleNode[Float], features: Int,
-              count: Int, id: Int, stride: Int = 1)(input: ModuleNode[Float]): ModuleNode[Float] = {
-      var output = block(features, stride, input, s"${id}a")
-      (1 until count).foreach {i =>
-        output = block(features, 1, output, s"${id}${('a' + i).toChar}")
+    def layer(block: (Int, Int, String) => Module[Float], features: Int,
+              count: Int, id: Int, stride: Int = 1): Module[Float] = {
+      val s = Sequential()
+      for (i <- 0 until count) {
+        s.add(block(features, if (i == 0) stride else 1, s"${id}${('a' + i).toChar}"))
       }
-      output
+      s
     }
 
-    val model = if (dataset == DatasetType.ImageNet) {
+    val model = Sequential()
+    if (dataSet == DatasetType.ImageNet) {
       val cfg = Map(
         50 -> ((3, 4, 6, 3), 2048,
-          bottleneckFunc: (Int, Int, ModuleNode[Float], String) => ModuleNode[Float]) //,
+          bottleneck: (Int, Int, String) => Module[Float]) //,
 //        101 -> ((3, 4, 23, 3), 2048,
-//          bottleneckFunc: (Int, Int, ModuleNode[Float]) => ModuleNode[Float]),
+//          bottleneck: (Int, Int, String) => Module[Float]),
 //        152 -> ((3, 8, 36, 3), 2048,
-//          bottleneckFunc: (Int, Int, ModuleNode[Float]) => ModuleNode[Float]),
+//          bottleneck: (Int, Int, String) => Module[Float]),
 //        200 -> ((3, 24, 36, 3), 2048,
-//          bottleneckFunc: (Int, Int, ModuleNode[Float]) => ModuleNode[Float])
+//          bottleneck: (Int, Int, String) => Module[Float])
       )
 
       require(cfg.keySet.contains(depth), s"Invalid depth ${depth}")
@@ -286,24 +288,23 @@ object CaffeInfDemo {
       iChannels = 64
       logger.info(" | ResNet-" + depth + " ImageNet")
 
-      val input = Input()
-      val conv1 = Convolution(3, 64, 7, 7, 2, 2, 3, 3,
-        optnet = optnet, propagateBack = false).setName("conv1").inputs(input)
-      val bn = Sbn(64).setName("bn_conv1").inputs(conv1)
-      val relu = ReLU(true).setName("conv1_relu").inputs(bn)
-      val pool = SpatialMaxPooling(3, 3, 2, 2, 0, 0).ceil().setName("pool1").inputs(relu)
-      val layer1 = layer(block, 64, loopConfig._1, 2)(pool)
-      val layer2 = layer(block, 128, loopConfig._2, 3, 2)(layer1)
-      val layer3 = layer(block, 256, loopConfig._3, 4, 2)(layer2)
-      val layer4 = layer(block, 512, loopConfig._4, 5, 2)(layer3)
-      val pool2 = SpatialAveragePooling(7, 7, 1, 1).setName("pool5").inputs(layer4)
-      val view = View(nFeatures).setNumInputDims(3).inputs(pool2)
-      val fc = Linear(nFeatures, classNum, true, L2Regularizer(1e-4), L2Regularizer(1e-4))
-        .setName(s"fc1000").setInitMethod(RandomNormal(0.0, 0.01), Zeros).inputs(view)
-      val output = SoftMax().setName("probt").inputs(fc)
-      Graph(input, output)
+      model.add(Convolution(3, 64, 7, 7, 2, 2, 3, 3, optnet = optnet, propagateBack = false)
+        .setName("conv1"))
+        .add(Sbn(64).setName("bn_conv1"))
+        .add(ReLU(true).setName("conv1_relu"))
+        .add(SpatialMaxPooling(3, 3, 2, 2, 0, 0).ceil().setName("pool1"))
+        .add(layer(block, 64, loopConfig._1, 2))
+        .add(layer(block, 128, loopConfig._2,3,  2))
+        .add(layer(block, 256, loopConfig._3,4,  2))
+        .add(layer(block, 512, loopConfig._4,5,  2))
+        .add(SpatialAveragePooling(7, 7, 1, 1).setName("pool5"))
+        .add(View(nFeatures).setNumInputDims(3))
+        .add(Linear(nFeatures, classNum, true, L2Regularizer(1e-4), L2Regularizer(1e-4))
+          .setName(s"fc1000")
+          .setInitMethod(RandomNormal(0.0, 0.01), Zeros))
+        .add(SoftMax().setName("probt"))
     } else {
-      throw new IllegalArgumentException(s"Invalid dataset ${dataset}")
+      throw new IllegalArgumentException(s"Invalid dataset ${dataSet}")
     }
     model
   }

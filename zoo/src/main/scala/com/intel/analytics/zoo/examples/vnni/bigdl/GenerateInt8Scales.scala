@@ -16,18 +16,22 @@
 
 package com.intel.analytics.zoo.examples.vnni.bigdl
 
+import com.intel.analytics.bigdl.Module
 import com.intel.analytics.bigdl.dataset.{DataSet, MiniBatch, Sample, SampleToMiniBatch}
 import com.intel.analytics.bigdl.example.mkldnn.int8.Utils.GenInt8ScalesParams
-import com.intel.analytics.bigdl.models.resnet.ImageNetDataSet
-import com.intel.analytics.bigdl.nn.{Graph, Module}
+import com.intel.analytics.bigdl.numeric.NumericFloat
+import com.intel.analytics.bigdl.models.resnet.{Convolution, ImageNetDataSet, ResNet}
+import com.intel.analytics.bigdl.models.resnet.ResNet.DatasetType.ImageNet
+import com.intel.analytics.bigdl.models.resnet.ResNet.{DatasetType, ShortcutType}
+import com.intel.analytics.bigdl.nn._
+import com.intel.analytics.bigdl.optim.L2Regularizer
 import com.intel.analytics.bigdl.tensor.Tensor
-import com.intel.analytics.bigdl.utils.Engine
+import com.intel.analytics.bigdl.utils.{Engine, T, Table}
 import com.intel.analytics.zoo.feature.FeatureSet
 import com.intel.analytics.zoo.pipeline.api.keras.layers.utils.EngineRef
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.tensorflow.Tensor
 
 /**
  * GenerateInt8Scales will generate a model with scales information,
@@ -56,8 +60,16 @@ object GenerateInt8Scales {
       val dataset = DataSet.rdd(images) -> SampleToMiniBatch(batchsize)
       val defPath = param.model + "/deploy_overlap.prototxt"
       val modelPath = param.model + "/bvlc.caffemodel"
+      val input = Tensor[Float](6, 3, 224, 224).rand(-1, 1)
+      val loadedModel = Module.loadCaffeModel[Float](defPath, modelPath).evaluate()
+      val o0 = loadedModel.forward(input).toTensor[Float].clone()
+      val model = CaffeInfDemo.caffe2zoo(loadedModel).toGraph().evaluate()
+      val o1 = loadedModel.forward(input)
+      val o2 = model.forward(input)
+      require(loadedModel.output == model.output)
+//      val model = ResNet(2, T("depth" -> 50, "shortcutType" -> ShortcutType.B, "dataSet" -> ImageNet,
+//        "optnet" -> false)).toGraph()
 
-      val model = CaffeInfDemo.caffe2zoo(Module.loadCaffeModel[Float](defPath, modelPath)).toGraph()
       genereateInt8Scales(model, param.model, dataset.toDistributed().data(false))
       saveQuantizedModel(model, param.model)
     }
