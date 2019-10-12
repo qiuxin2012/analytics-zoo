@@ -160,6 +160,23 @@ class DistriEstimatorSpec extends ZooSpecHelper {
     result2(Array(1)) should be(1.0 +- 1e-2)
   }
 
+  "Train with MSE and LBFGS2" should "be good" in {
+    LoggerFilter.redirectSparkInfoLogs()
+    RandomGenerator.RNG.setSeed(10)
+    val mseModel = mse
+    val estimator = Estimator(mseModel, new LBFGS[Double]())
+    (0 until 100).foreach{i =>
+      val d = prepareData(i)
+      estimator.train(d, MSECriterion[Double]())
+    }
+
+    val result1 = mseModel.forward(input1).asInstanceOf[Tensor[Double]]
+    result1(Array(1)) should be(0.0 +- 1e-2)
+
+    val result2 = mseModel.forward(input2).asInstanceOf[Tensor[Double]]
+    result2(Array(1)) should be(1.0 +- 1e-2)
+  }
+
   "Train with MSE and SGD" should "be trained with good result" in {
     LoggerFilter.redirectSparkInfoLogs()
     val mm = mse

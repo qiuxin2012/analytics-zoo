@@ -16,12 +16,17 @@
 package com.intel.analytics.zoo.pipeline.estimator
 
 import com.intel.analytics.bigdl.{Criterion, Module}
-import com.intel.analytics.bigdl.dataset.MiniBatch
+import com.intel.analytics.bigdl.dataset.{DataSet, MiniBatch}
 import com.intel.analytics.bigdl.optim._
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.zoo.feature.{DiskFeatureSet, DistributedFeatureSet, FeatureSet}
+import com.intel.analytics.zoo.common.OneIteration
+import com.intel.analytics.zoo.feature._
+import com.intel.analytics.zoo.pipeline.api.keras.layers.utils.EngineRef
 import com.intel.analytics.zoo.pipeline.api.keras.models.InternalDistriOptimizer
 import org.apache.log4j.Logger
+import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDD
+import org.apache.zookeeper.KeeperException.UnimplementedException
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
@@ -37,6 +42,11 @@ trait AbstractEstimator[T]{
             checkPointTrigger: Option[Trigger] = None,
             validationSet: FeatureSet[MiniBatch[T]] = null,
             validationMethod: Array[ValidationMethod[T]] = null): this.type
+
+  def train(trainSet: MiniBatch[T],
+            criterion: Criterion[T]): this.type = {
+    throw new UnimplementedException
+  }
 
   def evaluate(validationSet: FeatureSet[MiniBatch[T]],
                validationMethod: Array[ValidationMethod[T]]
@@ -153,6 +163,70 @@ class Estimator[T: ClassTag] private[zoo](
       validationSet, validationMethod)
     this
   }
+
+  /**
+   * Train model with provided trainSet and criterion.
+   * The training will end until the endTrigger is triggered.
+   * During the training, if checkPointTrigger is defined and triggered,
+   * the model will be saved to modelDir. And if validationSet and validationMethod
+   * is defined, the model will be evaluated at the checkpoint.
+   *
+   * @param trainSet training FeatureSet
+   * @param criterion Loss function
+   * @param endTrigger When to finish the training
+   * @param checkPointTrigger When to save a checkpoint and evaluate model.
+   * @param validationSet Validation FeatureSet.
+   * @param validationMethod Validation Methods.
+   * @return self
+   */
+  override def train(miniBatch: MiniBatch[T],
+                     criterion: Criterion[T]): this.type = {
+    if (internalEstimator == null) {
+      internalEstimator = new InternalDistriOptimizer[T](model, null, criterion)
+        .setCheckpointDir(modelDir)
+        .setOptimMethods(optimMethods)
+    }
+    if (gradientClipping.nonEmpty) {
+      // as internalEstimator will deal with the duplicated type of clipping,
+      // we just call the set function directly.
+      gradientClipping.foreach {
+        case constant: ConstantClipping =>
+          logger.info(s"Using constant clipping (${constant.min}, ${constant.max}).")
+          internalEstimator.asInstanceOf[Optimizer[_, _]]
+            .setConstantGradientClipping(constant.min, constant.max)
+        case l2norm: L2NormClipping =>
+          logger.info(s"Using L2 norm clipping ${l2norm.l2Norm}.")
+          internalEstimator.asInstanceOf[Optimizer[_, _]]
+            .setGradientClippingByl2Norm(l2norm.l2Norm)
+        case other =>
+          throw new IllegalArgumentException(s"Unsupported gradient clipping type ${other}")
+      }
+    } else {
+      internalEstimator.asInstanceOf[Optimizer[_, _]].disableGradientClipping()
+    }
+    val nodeNumber = EngineRef.getNodeNumber()
+    val sc = SparkContext.getOrCreate()
+    if (countArray != null) {
+      countArray = sc.parallelize((0 until nodeNumber), nodeNumber)
+        // Keep this line, or the array will be send to worker every time
+        .coalesce(nodeNumber, true)
+        .mapPartitions(iter => {
+          Iterator.single(iter.toArray)
+        }).cache().setName("cached index")
+    }
+
+    val batchPerNode = miniBatch.size() / nodeNumber
+    val bcMiniBatch = sc.broadcast(miniBatch)
+    val newTrainSet = countArray.mapPartitionsWithIndex{(indx, data) =>
+      Iterator.single(bcMiniBatch.value.slice(1 + indx * batchPerNode, batchPerNode))
+    }
+    val trainSet = DRAMFeatureSet.rdd(newTrainSet)
+    internalEstimator.train(trainSet, criterion, Some(OneIteration()))
+    trainSet.unpersist()
+    this
+  }
+
+  protected var countArray: RDD[Array[Int]] = null
 
   /**
    * Evaluate the model on the validationSet with the validationMethods.

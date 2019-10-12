@@ -24,6 +24,7 @@ import com.intel.analytics.bigdl.utils.RandomGenerator
 import com.intel.analytics.zoo.feature.common.{ArrayLike, ArrayLikeWrapper}
 import com.intel.analytics.zoo.feature.pmem._
 import com.intel.analytics.zoo.pipeline.api.keras.layers.utils.EngineRef
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.slf4j.{Logger, LoggerFactory}
@@ -223,7 +224,7 @@ private[zoo] class DistributedDataSetWrapper[T: ClassTag](featureSet: Distribute
  */
 // T is the returning value type. like ByteRecord
 class CachedDistributedFeatureSet[T: ClassTag]
-(buffer: RDD[ArrayLike[T]])
+(val buffer: RDD[ArrayLike[T]])
   extends DistributedFeatureSet[T]{
 
   protected lazy val count: Long = buffer.mapPartitions(iter => {
@@ -433,5 +434,25 @@ object FeatureSet {
           s"DataStrategy ${dataStrategy} is not supported at the moment")
 
     }
+  }
+
+  /**
+   * Wrap an array as a distributed FeatureSet.
+   * @param localData
+   * @param sc
+   * @tparam T
+   * @return
+   */
+  def array[T: ClassTag](localData: Array[T], sc: SparkContext): CachedDistributedFeatureSet[T] = {
+    val nodeNumber = EngineRef.getNodeNumber()
+    new CachedDistributedFeatureSet[T](
+      sc.parallelize(localData, nodeNumber)
+        // Keep this line, or the array will be send to worker every time
+        .coalesce(nodeNumber, true)
+        .mapPartitions(iter => {
+          Iterator.single(new ArrayLikeWrapper(iter.toArray).asInstanceOf[ArrayLike[T]])
+        }).setName("cached dataset")
+        .cache()
+    )
   }
 }

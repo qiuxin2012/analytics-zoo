@@ -14,7 +14,8 @@
 # limitations under the License.
 #
 
-from bigdl.util.common import JavaValue, callBigDlFunc
+from bigdl.util.common import JavaValue, callBigDlFunc, JTensor
+import numpy as np
 
 
 class Estimator(JavaValue):
@@ -97,6 +98,30 @@ class Estimator(JavaValue):
         callBigDlFunc(self.bigdl_type, "estimatorTrainImageFeature", self.value, train_set,
                       criterion, end_trigger, checkpoint_trigger, validation_set,
                       validation_method, batch_size)
+
+    def train_minibatch(self, inputs, targets, criterion):
+        """
+        Train model with provided inputs, targets and criterion.
+        :param inputs: numpy array or list of numpy array
+        :param targets: numpy array or list of numpy array
+        :param criterion: Loss function
+        :return:
+        """
+        if isinstance(inputs, np.ndarray):
+            inputs = [inputs]
+        else:
+            assert all(isinstance(input, np.ndarray) for input in inputs), \
+                "inputs should be a list of np.ndarray, not %s" % type(inputs)
+        if isinstance(targets, np.ndarray):
+            targets = [targets]
+        else:
+            assert all(isinstance(target, np.ndarray) for target in targets), \
+                "targets should be a list of np.ndarray, not %s" % type(targets)
+        callBigDlFunc(self.bigdl_type, "estimatorTrainMiniBatch", self.value,
+                      [JTensor.from_ndarray(input) for input in inputs],
+                      [JTensor.from_ndarray(target) for target in targets],
+                      criterion)
+
 
     def evaluate(self, validation_set, validation_method, batch_size=32):
         """

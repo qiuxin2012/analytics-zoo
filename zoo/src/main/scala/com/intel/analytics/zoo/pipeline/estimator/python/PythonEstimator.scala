@@ -21,6 +21,7 @@ import java.util.{ArrayList => JArrayList, HashMap => JHashMap, List => JList, M
 import com.intel.analytics.bigdl.{Criterion, Module}
 import com.intel.analytics.bigdl.dataset.{ByteRecord, MiniBatch, Sample, SampleToMiniBatch}
 import com.intel.analytics.bigdl.optim.{OptimMethod, Trigger, ValidationMethod, ValidationResult}
+import com.intel.analytics.bigdl.python.api.JTensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.transform.vision.image.{ImageFeature, ImageFeatureToMiniBatch}
 import com.intel.analytics.zoo.common.PythonZoo
@@ -85,6 +86,16 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
     estimator.train(trainMiniBatch, criterion,
       Some(endTrigger), Some(checkPointTrigger),
       validationMiniBatch, validationMethod)
+  }
+
+  def estimatorTrainMiniBatch(
+        estimator: Estimator[T],
+        inputs: JList[JTensor],
+        targets: JList[JTensor],
+        criterion: Criterion[T]): Unit = {
+    val miniBatch = MiniBatch(inputs.asScala.toArray.map(toTensor),
+      targets.asScala.toArray.map(toTensor))
+    estimator.train(miniBatch, criterion)
   }
 
   def estimatorTrainImageFeature(estimator: Estimator[T],
