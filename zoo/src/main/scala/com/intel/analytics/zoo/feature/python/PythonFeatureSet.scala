@@ -16,17 +16,21 @@
 
 package com.intel.analytics.zoo.feature.python
 
+import java.util.{List => JList}
+
 import com.intel.analytics.bigdl.DataSet
-import com.intel.analytics.bigdl.dataset.{Transformer, Sample => JSample}
-import com.intel.analytics.bigdl.python.api.Sample
+import com.intel.analytics.bigdl.dataset.{MiniBatch, Transformer, Sample => JSample}
+import com.intel.analytics.bigdl.python.api.{JTensor, Sample}
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.transform.vision.image._
 import com.intel.analytics.zoo.common.PythonZoo
 import com.intel.analytics.zoo.feature.FeatureSet
 import com.intel.analytics.zoo.feature.pmem.MemoryType
+import org.apache.spark.SparkContext
 import org.apache.spark.api.java.JavaRDD
 
 import scala.reflect.ClassTag
+import scala.collection.JavaConverters._
 
 object PythonFeatureSet {
 
@@ -61,6 +65,19 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
 
   def featureSetToDataSet(featureSet: FeatureSet[Any]): DataSet[Any] = {
     featureSet.toDataSet()
+  }
+
+  def createFeatureSetFromArrayTensor(
+      inputs: JList[JList[JTensor]],
+      targets: JList[JList[JTensor]]): FeatureSet[MiniBatch[T]] = {
+    require(inputs.size() == targets.size(), "inputs and targets")
+    val sc = SparkContext.getOrCreate()
+    val miniBatches = new Array[MiniBatch[T]](inputs.size())
+    (0 until miniBatches.length).foreach{i =>
+      miniBatches(i) = MiniBatch(inputs.get(i).asScala.toArray.map(toTensor),
+        targets.get(i).asScala.toArray.map(toTensor))
+    }
+    FeatureSet.array(miniBatches, sc)
   }
 
 }

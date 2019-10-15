@@ -134,6 +134,16 @@ class Estimator(JavaValue):
         callBigDlFunc(self.bigdl_type, "estimatorEvaluate", self.value,
                       validation_set, validation_method, batch_size)
 
+    def evaluate_minibatch(self, validation_set, validation_method):
+        """
+        Evaluate the model on the validationSet with the validationMethods.
+        :param validation_set: validation FeatureSet, a FeatureSet[Sample[T]]
+        :param validation_method: validation methods
+        :return: validation results
+        """
+        callBigDlFunc(self.bigdl_type, "estimatorEvaluateMiniBatch", self.value,
+                      validation_set, validation_method)
+
     def evaluate_imagefeature(self, validation_set, validation_method, batch_size=32):
         """
         Evaluate the model on the validationSet with the validationMethods.

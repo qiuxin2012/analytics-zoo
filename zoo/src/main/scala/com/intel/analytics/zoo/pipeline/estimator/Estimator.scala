@@ -206,7 +206,7 @@ class Estimator[T: ClassTag] private[zoo](
     }
     val nodeNumber = EngineRef.getNodeNumber()
     val sc = SparkContext.getOrCreate()
-    if (countArray != null) {
+    if (countArray == null) {
       countArray = sc.parallelize((0 until nodeNumber), nodeNumber)
         // Keep this line, or the array will be send to worker every time
         .coalesce(nodeNumber, true)
