@@ -49,9 +49,21 @@ class LeNet(nn.Module):
 
 
 if __name__ == '__main__':
-    sparkConf = init_spark_conf().setAppName("test_pytorch_lenet")
-    sc = init_nncontext(sparkConf)
-    spark = SparkSession.builder.config(conf=sparkConf).getOrCreate()
+    # sparkConf = init_spark_conf().setAppName("test_pytorch_lenet").setMaster("local[2]").set("spark.driver.memory", "10g")
+    # sc = init_nncontext(sparkConf)
+    num_executors = 8
+    num_cores_per_executor = 1
+    hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
+    sc = init_spark_on_yarn(
+        hadoop_conf=hadoop_conf_dir,
+        conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
+        num_executor=num_executors,
+        executor_cores=num_cores_per_executor,
+        executor_memory="4g",
+        driver_memory="10g",
+        driver_cores=1,
+        spark_conf={"spark.rpc.message.maxSize": "1024"})
+    spark = SparkSession.builder.getOrCreate()
 
     mnist = datasets.MNIST('../data', train=True, download=True)
     X_train = mnist.data.numpy() / 255.0
@@ -72,10 +84,10 @@ if __name__ == '__main__':
     model = TorchNet.from_pytorch(torch_model, [1, 1, 28, 28])
     criterion = TorchCriterion.from_pytorch(lossFunc, [1, 10], torch.LongTensor([5]))
     classifier = NNClassifier(model, criterion, SeqToTensor([1, 28, 28])) \
-        .setBatchSize(64) \
+        .setBatchSize(10000) \
         .setOptimMethod(Adam()) \
         .setLearningRate(0.001)\
-        .setMaxEpoch(2)
+        .setMaxEpoch(10)
 
     nnClassifierModel = classifier.fit(trainingDF)
 
@@ -83,7 +95,7 @@ if __name__ == '__main__':
     shift = udf(lambda p: p - 1, DoubleType())
     res = nnClassifierModel.transform(validationDF) \
         .withColumn("prediction", shift(col('prediction')))
-    res.show(100)
+    res.show(10)
 
     correct = res.filter("label=prediction").count()
     overall = res.count()

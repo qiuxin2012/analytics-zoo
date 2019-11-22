@@ -207,12 +207,8 @@ class Estimator[T: ClassTag] private[zoo](
     val nodeNumber = EngineRef.getNodeNumber()
     val sc = SparkContext.getOrCreate()
     if (countArray == null) {
-      countArray = sc.parallelize((0 until nodeNumber), nodeNumber)
-        // Keep this line, or the array will be send to worker every time
-        .coalesce(nodeNumber, true)
-        .mapPartitions(iter => {
-          Iterator.single(iter.toArray)
-        }).cache().setName("cached index")
+      countArray = Estimator.createCache(sc, nodeNumber)
+      countArray.count()
     }
 
     val batchPerNode = miniBatch.size() / nodeNumber
@@ -226,7 +222,7 @@ class Estimator[T: ClassTag] private[zoo](
     this
   }
 
-  protected var countArray: RDD[Array[Int]] = null
+  protected var countArray: RDD[Long] = null
 
   /**
    * Evaluate the model on the validationSet with the validationMethods.
@@ -258,6 +254,13 @@ class Estimator[T: ClassTag] private[zoo](
 
 object Estimator {
   val logger = Logger.getLogger(this.getClass)
+  protected def createCache(sc: SparkContext, nodeNumber: Int): RDD[Long] = {
+    sc.range(0, nodeNumber * 100, 1, nodeNumber)
+        // Keep this line, or the array will be send to worker every time
+        .coalesce(nodeNumber, true)
+        .setName("cached index").cache()
+  }
+
   /**
    * Create an estimator
    * @param model model

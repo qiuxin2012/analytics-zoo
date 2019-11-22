@@ -1083,12 +1083,24 @@ private[zoo] class InternalDistriOptimizer[T: ClassTag] (
     state("isLayerwiseScaled") = com.intel.analytics.bigdl.nn.Utils.isLayerwiseScaled(_model)
 
     val nodeNumber = EngineRef.getNodeNumber()
-    val coresPerNode = EngineRef.getCoreNumber()
+    val numOmpThread = System.getenv("OMP_NUM_THREADS").toInt
+    val modelPerNode = if (numOmpThread != 1) {
+      val coreNum = EngineRef.getCoreNumber()
+      math.floor(coreNum / numOmpThread).toInt
+    } else {
+      EngineRef.getCoreNumber()
+    }
+
+    logger.info(s"------------------${nodeNumber} ${numOmpThread} ${modelPerNode}---------------")
+    println(s"------------------${nodeNumber} ${numOmpThread} ${modelPerNode}---------------")
 
     val partitionNum = distDataset.originRDD().partitions.length
     val modelParameters = InternalOptimizerUtil.getParametersFromModel(trainingModel)
 
+    val startPreInput = System.nanoTime()
     prepareInput()
+    logger.info(s"prepare input cost ${(System.nanoTime() - startPreInput) / 1e9} s")
+    println(s"prepare input cost ${(System.nanoTime() - startPreInput) / 1e9} s")
 
     // subModuleName -> (storageOffset, length, AllReduceParameter)
     if (allReduceParameter == null || cachedModels == null) {
@@ -1125,9 +1137,13 @@ private[zoo] class InternalDistriOptimizer[T: ClassTag] (
 
       val modelsAndBroadcast = InternalOptimizerUtil.initThreadModels[T](
         trainingModel, distDataset, criterion, state,
-        Int.box(nodeNumber), Int.box(coresPerNode), Boolean.box(checkSingleton),
+        Int.box(nodeNumber), Int.box(modelPerNode), Boolean.box(checkSingleton),
         allReduceParameter, parameterSplits, validationMethods, optimMethods, parameterProcessors)
       cachedModels = modelsAndBroadcast._1
+      cachedModels.map{_ =>
+        EngineRef.getDefaultThreadPool().setPoolSize(numOmpThread)
+        1
+      }.count()
       modelBroadcast = modelsAndBroadcast._2
     }
 
@@ -1151,7 +1167,7 @@ private[zoo] class InternalDistriOptimizer[T: ClassTag] (
         InternalOptimizerUtil.optimizeModels[T](
           trainingModel,
           distDataset,
-          Int.box(coresPerNode),
+          Int.box(modelPerNode),
           state,
           endWhen,
           metrics,
@@ -1215,7 +1231,7 @@ private[zoo] class InternalDistriOptimizer[T: ClassTag] (
             }
             val modelsAndBroadcast = InternalOptimizerUtil.initThreadModels[T](
               newModel, distDataset, criterion, state,
-              Int.box(nodeNumber), Int.box(coresPerNode), Boolean.box(checkSingleton),
+              Int.box(nodeNumber), Int.box(modelPerNode), Boolean.box(checkSingleton),
               allReduceParameter, parameterSplits, validationMethods, optimMethods)
             cachedModels = modelsAndBroadcast._1
             modelBroadcast = modelsAndBroadcast._2

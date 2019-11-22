@@ -53,8 +53,8 @@ if __name__ == '__main__':
     hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
 
     if hadoop_conf_dir:
-        num_executors = 2
-        num_cores_per_executor = 4
+        num_executors = 3
+        num_cores_per_executor = 6
         sc = init_spark_on_yarn(
             hadoop_conf=hadoop_conf_dir,
             conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
@@ -92,11 +92,11 @@ if __name__ == '__main__':
 
     classifier = NNClassifier(torchnet, torchcriterion, featureTransformer) \
         .setLearningRate(0.001) \
-        .setBatchSize(16) \
-        .setMaxEpoch(1) \
+        .setBatchSize(18 * 4) \
+        .setMaxEpoch(3) \
         .setFeaturesCol("image") \
         .setCachingSample(False) \
-        .setValidation(EveryEpoch(), validationDF, [Accuracy()], 16)
+        .setValidation(EveryEpoch(), validationDF, [Accuracy()], 18 * 4)
 
     catdogModel = classifier.fit(trainingDF)
 

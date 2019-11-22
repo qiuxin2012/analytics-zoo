@@ -101,9 +101,13 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
         inputs: JList[JTensor],
         targets: JList[JTensor],
         criterion: Criterion[T]): Unit = {
+    val start = System.currentTimeMillis()
+    println("estimatorTrainMiniBatch start:" + start)
     val miniBatch = MiniBatch(inputs.asScala.toArray.map(toTensor),
       targets.asScala.toArray.map(toTensor))
     estimator.train(miniBatch, criterion)
+    println("estimatorTrainMiniBatch end:" + System.currentTimeMillis())
+    println("estimatorTrainMiniBatch cost:" + (System.currentTimeMillis() - start))
   }
 
   def estimatorTrainImageFeature(estimator: Estimator[T],

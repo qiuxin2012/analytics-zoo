@@ -53,8 +53,9 @@ class PythonZoo[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonBigDLK
 
   override def toTensor(jTensor: JTensor): Tensor[T] = {
     if (jTensor == null) return null
+    val s = System.nanoTime()
 
-    this.typeName match {
+    val r = this.typeName match {
       case "float" =>
         if (null == jTensor.indices) {
           if (jTensor.shape == null || jTensor.shape.product == 0) {
@@ -79,12 +80,15 @@ class PythonZoo[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonBigDLK
       case t: String =>
         throw new IllegalArgumentException(s"Not supported type: ${t}")
     }
+    println(s"toTensor cost: ${(System.nanoTime() - s) / 1e6} ms")
+    r
   }
 
   override def toJTensor(tensor: Tensor[T]): JTensor = {
+    val s = System.nanoTime()
     // clone here in case the the size of storage larger then the size of tensor.
     require(tensor != null, "tensor cannot be null")
-    tensor.getTensorType match {
+    val r = tensor.getTensorType match {
       case SparseType =>
         // Note: as SparseTensor's indices is inaccessible here,
         // so we will transfer it to DenseTensor. Just for testing.
@@ -113,6 +117,8 @@ class PythonZoo[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonBigDLK
         throw new IllegalArgumentException(s"toJTensor: Unsupported tensor type" +
           s" ${tensor.getTensorType}")
     }
+    println(s"toJTensor cost: ${(System.nanoTime() - s) / 1e6} ms")
+    r
   }
 
   def activityToList(outputActivity: Activity): JList[Object] = {
