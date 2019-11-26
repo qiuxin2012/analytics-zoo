@@ -81,6 +81,22 @@ case class SeveralIteration(interval: Int) extends ZooTrigger{
 }
 
 /**
+ *
+ * @param interval - trigger interval "n"
+ */
+case class OneIteration() extends ZooTrigger{
+  protected var triggered = false
+  override def apply(state: Table): Boolean = {
+    if (triggered) {
+      true
+    } else {
+      triggered = true
+      false
+    }
+  }
+}
+
+/**
  * A trigger that triggers an action when training reaches
  * the number of epochs specified by "max".
  * Usually used in Optimizer.setEndWhen.

@@ -14,8 +14,10 @@
 # limitations under the License.
 #
 
-from bigdl.util.common import JavaValue
+from bigdl.util.common import JavaValue, JTensor
 from zoo.common.utils import callZooFunc
+import numpy as np
+import time
 
 
 class Estimator(JavaValue):
@@ -25,7 +27,6 @@ class Estimator(JavaValue):
     Estimator wraps a model, and provide an uniform training, evaluation or prediction operation on
     both local host and distributed spark environment.
     """
-
     def __init__(self, model, optim_methods=None, model_dir=None, jvalue=None, bigdl_type="float"):
         self.bigdl_type = bigdl_type
         self.value = jvalue if jvalue else callZooFunc(
@@ -76,8 +77,8 @@ class Estimator(JavaValue):
         :return: Estimator
         """
         callZooFunc(self.bigdl_type, "estimatorTrain", self.value, train_set,
-                    criterion, end_trigger, checkpoint_trigger, validation_set,
-                    validation_method, batch_size)
+                      criterion, end_trigger, checkpoint_trigger, validation_set,
+                      validation_method, batch_size)
 
     def train_imagefeature(self, train_set, criterion, end_trigger=None, checkpoint_trigger=None,
                            validation_set=None, validation_method=None, batch_size=32):
@@ -97,8 +98,43 @@ class Estimator(JavaValue):
         :return:
         """
         callZooFunc(self.bigdl_type, "estimatorTrainImageFeature", self.value, train_set,
-                    criterion, end_trigger, checkpoint_trigger, validation_set,
-                    validation_method, batch_size)
+                      criterion, end_trigger, checkpoint_trigger, validation_set,
+                      validation_method, batch_size)
+
+    def train_minibatch(self, inputs, targets, criterion):
+        """
+        Train model with provided inputs, targets and criterion.
+        :param inputs: numpy array or list of numpy array
+        :param targets: numpy array or list of numpy array
+        :param criterion: Loss function
+        :return:
+        """
+        if isinstance(inputs, np.ndarray):
+            inputs = [inputs]
+        else:
+            assert all(isinstance(input, np.ndarray) for input in inputs), \
+                "inputs should be a list of np.ndarray, not %s" % type(inputs)
+        if isinstance(targets, np.ndarray):
+            targets = [targets]
+        else:
+            assert all(isinstance(target, np.ndarray) for target in targets), \
+                "targets should be a list of np.ndarray, not %s" % type(targets)
+        print("python start:")
+        t1 = time.time()
+        print(t1)
+        inputs = [JTensor.from_ndarray(input) for input in inputs]
+        targets = [JTensor.from_ndarray(target) for target in targets]
+        t2 = time.time()
+        callZooFunc(self.bigdl_type, "estimatorTrainMiniBatch", self.value,
+                      inputs,
+                      targets,
+                      criterion)
+        print("python end:")
+        t3 = time.time()
+        print(t3)
+        print(t3 - t1)
+        print(t2 - t1)
+
 
     def evaluate(self, validation_set, validation_method, batch_size=32):
         """
@@ -109,7 +145,17 @@ class Estimator(JavaValue):
         :return: validation results
         """
         callZooFunc(self.bigdl_type, "estimatorEvaluate", self.value,
-                    validation_set, validation_method, batch_size)
+                      validation_set, validation_method, batch_size)
+
+    def evaluate_minibatch(self, validation_set, validation_method):
+        """
+        Evaluate the model on the validationSet with the validationMethods.
+        :param validation_set: validation FeatureSet, a FeatureSet[Sample[T]]
+        :param validation_method: validation methods
+        :return: validation results
+        """
+        callZooFunc(self.bigdl_type, "estimatorEvaluateMiniBatch", self.value,
+                      validation_set, validation_method)
 
     def evaluate_imagefeature(self, validation_set, validation_method, batch_size=32):
         """
@@ -120,4 +166,4 @@ class Estimator(JavaValue):
         :return: validation results
         """
         callZooFunc(self.bigdl_type, "estimatorEvaluateImageFeature", self.value,
-                    validation_set, validation_method, batch_size)
+                      validation_set, validation_method, batch_size)

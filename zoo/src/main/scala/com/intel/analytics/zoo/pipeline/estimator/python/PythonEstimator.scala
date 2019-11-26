@@ -21,10 +21,11 @@ import java.util.{List => JList}
 import com.intel.analytics.bigdl.{Criterion, Module}
 import com.intel.analytics.bigdl.dataset.{Sample, SampleToMiniBatch}
 import com.intel.analytics.bigdl.optim.{OptimMethod, Trigger, ValidationMethod, ValidationResult}
+import com.intel.analytics.bigdl.python.api.JTensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.transform.vision.image.{ImageFeature, ImageFeatureToMiniBatch}
 import com.intel.analytics.zoo.common.PythonZoo
-import com.intel.analytics.zoo.feature.FeatureSet
+import com.intel.analytics.zoo.feature.{CachedDistributedFeatureSet, DistributedFeatureSet, FeatureSet}
 import com.intel.analytics.zoo.pipeline.estimator.Estimator
 
 import scala.reflect.ClassTag
@@ -57,6 +58,14 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
     estimator.evaluate(validationMiniBatch, validationMethod.asScala.toArray)
   }
 
+  def estimatorEvaluateMiniBatch(
+        estimator: Estimator[T],
+        validationSet: FeatureSet[MiniBatch[T]],
+        validationMethod: JList[ValidationMethod[T]]
+        ): Map[ValidationMethod[T], ValidationResult] = {
+    estimator.evaluate(validationSet, validationMethod.asScala.toArray)
+  }
+
   def estimatorEvaluateImageFeature(estimator: Estimator[T],
                                     validationSet: FeatureSet[ImageFeature],
                                     validationMethod: JList[ValidationMethod[T]],
@@ -86,6 +95,20 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
     estimator.train(trainMiniBatch, criterion,
       Option(endTrigger), Option(checkPointTrigger),
       validationMiniBatch, Option(validationMethod).map(_.asScala.toArray).orNull)
+  }
+
+  def estimatorTrainMiniBatch(
+        estimator: Estimator[T],
+        inputs: JList[JTensor],
+        targets: JList[JTensor],
+        criterion: Criterion[T]): Unit = {
+    val start = System.currentTimeMillis()
+    println("estimatorTrainMiniBatch start:" + start)
+    val miniBatch = MiniBatch(inputs.asScala.toArray.map(toTensor),
+      targets.asScala.toArray.map(toTensor))
+    estimator.train(miniBatch, criterion)
+    println("estimatorTrainMiniBatch end:" + System.currentTimeMillis())
+    println("estimatorTrainMiniBatch cost:" + (System.currentTimeMillis() - start))
   }
 
   def estimatorTrainImageFeature(estimator: Estimator[T],

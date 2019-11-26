@@ -1112,7 +1112,10 @@ private[zoo] class InternalDistriOptimizer[T: ClassTag] (
     val partitionNum = distDataset.originRDD().partitions.length
     val modelParameters = InternalOptimizerUtil.getParametersFromModel(trainingModel)
 
+    val startPreInput = System.nanoTime()
     prepareInput()
+    logger.info(s"prepare input cost ${(System.nanoTime() - startPreInput) / 1e9} s")
+    println(s"prepare input cost ${(System.nanoTime() - startPreInput) / 1e9} s")
 
     // subModuleName -> (storageOffset, length, AllReduceParameter)
     if (allReduceParameter == null || cachedModels == null) {
