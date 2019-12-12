@@ -133,19 +133,6 @@ class SparkRunner():
                                                self._get_bigdl_jar_name_on_driver())
                 ]
 
-    def _ld_path_for_executor(self):
-        conda_env_path = "/".join(self._detect_python_location().split("/")[:-2])
-        python_interpreters = glob.glob("{}/lib/python*".format(conda_env_path))
-        assert len(python_interpreters) == 1, \
-            "Conda env should contain a single python, but got: {}:".format(python_interpreters)
-        python_interpreter_name = python_interpreters[0].split("/")[-1]
-        return ["{}/lib/lib{}m.so".format(self.PYTHON_ENV, python_interpreter_name),
-                ["{}/lib/{}/site-packages/".format(self.PYTHON_ENV, python_interpreter_name),
-                 "{}/lib/{}/site-packages/jep".format(self.PYTHON_ENV, python_interpreter_name),
-                 "{}/lib".format(self.PYTHON_ENV)
-                 ]
-                ]
-
     def init_spark_on_local(self, cores, conf=None, python_location=None):
         print("Start to getOrCreate SparkContext")
         os.environ['PYSPARK_PYTHON'] = \
@@ -220,9 +207,6 @@ class SparkRunner():
             else:
                 spark_conf["spark.executor.extraClassPath"] = zoo_bigdl_path_on_executor
 
-            ld_path = self._ld_path_for_executor()
-            spark_conf["spark.executorEnv.LD_PRELOAD"] = ld_path[0]
-            spark_conf["spark.executorEnv.LD_LIBRARY_PATH"] = ":".join(ld_path[1])
             spark_conf["spark.executorEnv.PYTHONHOME"] = self.PYTHON_ENV
 
             for item in spark_conf.items():

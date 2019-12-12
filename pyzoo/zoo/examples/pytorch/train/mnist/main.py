@@ -84,7 +84,7 @@ def main():
     # optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
     num_executors = 1
-    num_cores_per_executor = 1
+    num_cores_per_executor = 4
     hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
     sc = init_spark_on_yarn(
         hadoop_conf=hadoop_conf_dir,
