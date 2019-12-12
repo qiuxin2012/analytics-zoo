@@ -93,7 +93,7 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
     SampleToMiniBatch(batchSize)
   }
 
-  def estimatorTrainMiniBatchFeatureSet(
+  def estimatorTrainMiniBatch(
       estimator: Estimator[T],
       trainSet: FeatureSet[MiniBatch[T]],
       criterion: Criterion[T],
@@ -107,7 +107,7 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
   }
 
 
-  def estimatorEvaluateMiniBatchFeatureSet(
+  def estimatorEvaluateMiniBatch(
       estimator: Estimator[T],
       validationMiniBatch: FeatureSet[MiniBatch[T]],
       validationMethod: JList[ValidationMethod[T]]

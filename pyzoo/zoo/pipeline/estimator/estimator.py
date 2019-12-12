@@ -107,26 +107,6 @@ class Estimator(JavaValue):
                     validation_method)
         return self
 
-    def train_minibatch(self, train_set, criterion, end_trigger=None, checkpoint_trigger=None,
-              validation_set=None, validation_method=None):
-        """
-        Train model with provided trainSet and criterion.
-        The training will end until the endTrigger is triggered.
-        During the training, if checkPointTrigger is defined and triggered,
-        the model will be saved to modelDir. And if validationSet and validationMethod
-        is defined, the model will be evaluated at the checkpoint.
-        :param train_set: training FeatureSet, a FeatureSet[MiniBatch[T]]
-        :param criterion: Loss function
-        :param end_trigger: When to finish the training
-        :param checkpoint_trigger: When to save a checkpoint and evaluate model.
-        :param validation_set: Validation FeatureSet, a FeatureSet[MiniBatch[T]]
-        :param validation_method: Validation Methods.
-        :return: Estimator
-        """
-        callZooFunc(self.bigdl_type, "estimatorTrainMiniBatchFeatureSet", self.value, train_set,
-                    criterion, end_trigger, checkpoint_trigger, validation_set,
-                    validation_method)
-
     def train_imagefeature(self, train_set, criterion, end_trigger=None, checkpoint_trigger=None,
                            validation_set=None, validation_method=None, batch_size=32):
         """
@@ -168,8 +148,8 @@ class Estimator(JavaValue):
         :param batch_size: batch size
         :return: validation results
         """
-        callZooFunc(self.bigdl_type, "estimatorEvaluateMiniBatchFeatureSet", self.value,
-                    validation_set, validation_method)
+        return callZooFunc(self.bigdl_type, "estimatorEvaluateMiniBatch", self.value,
+                           validation_set, validation_method)
 
     def evaluate_imagefeature(self, validation_set, validation_method, batch_size=32):
         """
