@@ -17,7 +17,7 @@
 package com.intel.analytics.zoo.feature.python
 
 import com.intel.analytics.bigdl.DataSet
-import com.intel.analytics.bigdl.dataset.{Transformer, Sample => JSample}
+import com.intel.analytics.bigdl.dataset.{MiniBatch, Transformer, Sample => JSample}
 import com.intel.analytics.bigdl.python.api.Sample
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.transform.vision.image._
@@ -26,6 +26,7 @@ import com.intel.analytics.zoo.feature.FeatureSet
 import com.intel.analytics.zoo.feature.pmem.MemoryType
 import org.apache.spark.api.java.JavaRDD
 
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 object PythonFeatureSet {
@@ -72,6 +73,14 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
 
   def featureSetToDataSet(featureSet: FeatureSet[Any]): DataSet[Any] = {
     featureSet.toDataSet()
+  }
+
+  def createFeatureSetFromPython(dataset: Array[Byte]): FeatureSet[MiniBatch[Float]] = {
+    FeatureSet.python[MiniBatch[Float]](dataset, Array("data"), Array("target"))
+  }
+
+  def size(featureSet: DataSet[MiniBatch[Float]]): Long = {
+    featureSet.size()
   }
 
 }

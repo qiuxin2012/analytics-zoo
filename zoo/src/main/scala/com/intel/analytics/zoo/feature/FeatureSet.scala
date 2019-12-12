@@ -16,17 +16,22 @@
 
 package com.intel.analytics.zoo.feature
 
+import java.nio.file.Paths
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.intel.analytics.bigdl.DataSet
-import com.intel.analytics.bigdl.dataset.{AbstractDataSet, DistributedDataSet, Transformer}
+import com.intel.analytics.bigdl.dataset.{AbstractDataSet, DistributedDataSet, MiniBatch, Transformer}
+import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.utils.RandomGenerator
 import com.intel.analytics.zoo.feature.common.{ArrayLike, ArrayLikeWrapper}
 import com.intel.analytics.zoo.feature.pmem._
 import com.intel.analytics.zoo.pipeline.api.keras.layers.utils.EngineRef
+import com.intel.analytics.zoo.pipeline.api.net.{PytorchModel, PytorchModelWrapper}
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.slf4j.{Logger, LoggerFactory}
+import jep._
 
 import scala.reflect.ClassTag
 
@@ -186,7 +191,6 @@ trait DistributedFeatureSet[T] extends AbstractFeatureSet[T, RDD[T]] {
 /**
  * Wrap a featureSet to DistributedDataSet.
  * @param featureSet
- * @param ev$1
  * @tparam T
  */
 private[zoo] class DistributedDataSetWrapper[T: ClassTag](featureSet: DistributedFeatureSet[T])
@@ -321,6 +325,123 @@ class CachedDistributedFeatureSet[T: ClassTag]
   }
 }
 
+object PythonLoaderFeatureSet{
+  def loadPytorchLoader(
+      loaderName: String,
+      dataset: Array[Byte],
+      interpRdd: RDD[SharedInterpreter]): Unit = {
+    val bcDataSet = interpRdd.sparkContext.broadcast(dataset)
+    val imports = s"""
+      |import numpy as np
+      |from torchvision import datasets, transforms
+      |import torch
+      |import pickle
+      |""".stripMargin
+    val load = s"""
+      |by = bytes(b % 256 for b in pyjarray)
+      |${loaderName} = pickle.loads(by)
+      |""".stripMargin
+    interpRdd.mapPartitions{iter =>
+      val interp = iter.next()
+      interp.exec(imports)
+      interp.set("pyjarray", bcDataSet.value)
+      interp.exec(load)
+      interp.exec("by = bytes(b % 256 for b in pyjarray)")
+      interp.exec("loader = pickle.loads(by)")
+      Iterator.single(interp)
+    }.count()
+
+  }
+
+  private var sharedInterpRDD: RDD[SharedInterpreter] = null
+  def getOrCreateInterpRdd(): RDD[SharedInterpreter] = {
+    if (sharedInterpRDD == null) {
+      this.synchronized {
+        if (sharedInterpRDD == null) {
+          val sc = SparkContext.getOrCreate()
+          val nodeNumber = EngineRef.getNodeNumber()
+          // TODO: make sure 1 executor 1 partition
+          val originRdd = sc.parallelize(
+            Array.tabulate(nodeNumber)(_ => "123123"), nodeNumber)
+            .coalesce(nodeNumber, true)
+          // load pytorch library before jep, or libCaffe2.so will conflict.
+          originRdd.map(_ => PytorchModelWrapper.load()).count()
+          sharedInterpRDD = originRdd.mapPartitions { iter =>
+            val interp = new SharedInterpreter()
+            Iterator.single(interp)
+          }.cache()
+          sharedInterpRDD.count()
+          sharedInterpRDD
+        }
+      }
+    }
+    sharedInterpRDD
+  }
+}
+
+class PythonLoaderFeatureSet[T: ClassTag](
+    dataset: Array[Byte],
+    inputs: Array[String],
+    outputs: Array[String]) extends DistributedFeatureSet[T] {
+  import PythonLoaderFeatureSet._
+  protected val namePostfix = Integer.toHexString(java.util.UUID.randomUUID().hashCode())
+  protected val loaderName = s"loader${namePostfix}"
+  println(dataset.length)
+
+  val sharedInterp = getOrCreateInterpRdd()
+  loadPytorchLoader(loaderName, dataset, sharedInterp)
+  override def originRDD(): RDD[_] = {
+    sharedInterp
+  }
+
+  override def data(train: Boolean): RDD[T] = {
+    val loaderName = this.loaderName
+    val iterName = s"${loaderName}_iter"
+    sharedInterp.mapPartitions{ dataIter =>
+      val interp = dataIter.next()
+      val len = interp.getValue(s"len($loaderName)").asInstanceOf[Long]
+      interp.exec(s"${iterName} = enumerate($loaderName)")
+      new Iterator[T] {
+        var i = 0
+        val nextCode =
+          s"""
+            |batch_idx, (data, target) = next($iterName)
+            |""".stripMargin
+
+        override def hasNext: Boolean = {
+          i < len
+        }
+
+        override def next(): T = {
+          val stat = System.nanoTime()
+          i += 1
+          interp.exec(nextCode)
+          val input = interp.getValue("data.numpy()").asInstanceOf[NDArray[Array[Float]]]
+          val target = interp.getValue("target.numpy()").asInstanceOf[NDArray[Array[Long]]]
+          val r = MiniBatch[Float](Tensor[Float](input.getData, input.getDimensions),
+            Tensor[Float](target.getData().map(_.toFloat), target.getDimensions)
+          ).asInstanceOf[T]
+          println(s"${loaderName} next cost ${(System.nanoTime() - stat) / 1e9} s")
+          r
+        }
+      }
+    }
+
+  }
+
+  override def shuffle(): Unit = {
+
+  }
+
+  override def size(): Long = {
+    data(false).count()
+  }
+
+  override def toDistributed(): DistributedDataSet[T] = {
+    new DistributedDataSetWrapper[T](this)
+  }
+}
+
 /**
  * Wrap a RDD as a FeatureSet. RDD will be persist on local disk, and will load
  * one slice of the data to memory for the training.
@@ -422,6 +543,13 @@ object DRAMFeatureSet {
 
 object FeatureSet {
   val logger: Logger = LoggerFactory.getLogger(this.getClass)
+  private[zoo] def python[T: ClassTag](
+      dataset: Array[Byte],
+      inputs: Array[String],
+      targets: Array[String]): PythonLoaderFeatureSet[T] = {
+    new PythonLoaderFeatureSet[T](dataset, inputs, targets)
+  }
+
   def rdd[T: ClassTag](
        data: RDD[T],
        memoryType: MemoryType = DRAM,
