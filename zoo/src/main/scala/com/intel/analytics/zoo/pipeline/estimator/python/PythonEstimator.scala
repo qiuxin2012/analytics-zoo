@@ -93,17 +93,26 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
     SampleToMiniBatch(batchSize)
   }
 
-  def estimatorTrainMiniBatch(estimator: Estimator[T],
-                     trainSet: FeatureSet[MiniBatch[T]],
-                     criterion: Criterion[T],
-                     endTrigger: Trigger = null,
-                     checkPointTrigger: Trigger = null,
-                     validationSet: FeatureSet[MiniBatch[T]] = null,
-                     validationMethod: JList[ValidationMethod[T]] = null)
-  : estimator.type = {
+  def estimatorTrainMiniBatchFeatureSet(
+      estimator: Estimator[T],
+      trainSet: FeatureSet[MiniBatch[T]],
+      criterion: Criterion[T],
+      endTrigger: Trigger = null,
+      checkPointTrigger: Trigger = null,
+      validationSet: FeatureSet[MiniBatch[T]] = null,
+      validationMethod: JList[ValidationMethod[T]] = null) : estimator.type = {
     estimator.train(trainSet, criterion,
       Option(endTrigger), Option(checkPointTrigger),
       validationSet, Option(validationMethod).map(_.asScala.toArray).orNull)
+  }
+
+
+  def estimatorEvaluateMiniBatchFeatureSet(
+      estimator: Estimator[T],
+      validationMiniBatch: FeatureSet[MiniBatch[T]],
+      validationMethod: JList[ValidationMethod[T]]
+      ): Map[ValidationMethod[T], ValidationResult] = {
+    estimator.evaluate(validationMiniBatch, validationMethod.asScala.toArray)
   }
 
   def estimatorTrainImageFeature(estimator: Estimator[T],

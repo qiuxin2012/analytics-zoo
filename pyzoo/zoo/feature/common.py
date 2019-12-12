@@ -348,6 +348,13 @@ class FeatureSet(DataSet):
                              memory_type, sequential_order, shuffle)
         return cls(jvalue=jvalue)
 
+    @classmethod
+    def python(cls, dataset, bigdl_type="float"):
+        import pickle
+        by = bytearray(pickle.dumps(dataset))
+        jvalue = callZooFunc(bigdl_type, "createFeatureSetFromPython", by)
+        return cls(jvalue=jvalue)
+
     def transform(self, transformer):
         """
         Helper function to transform the data type in the data set.
@@ -356,6 +363,10 @@ class FeatureSet(DataSet):
         """
         jvalue = callZooFunc(self.bigdl_type, "transformFeatureSet", self.value, transformer)
         return FeatureSet(jvalue=jvalue)
+
+    def size(self):
+        jvalue = callZooFunc(self.bigdl_type, "size", self.value)
+        return jvalue
 
     def to_dataset(self):
         """
