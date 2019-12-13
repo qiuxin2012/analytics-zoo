@@ -358,24 +358,44 @@ object PythonLoaderFeatureSet{
     if (sharedInterpRDD == null) {
       this.synchronized {
         if (sharedInterpRDD == null) {
+          println("creating interp RDD")
           val sc = SparkContext.getOrCreate()
           val nodeNumber = EngineRef.getNodeNumber()
           // TODO: make sure 1 executor 1 partition
           val originRdd = sc.parallelize(
-            Array.tabulate(nodeNumber)(_ => "123123"), nodeNumber)
-            .coalesce(nodeNumber, true)
+            Array.tabulate(nodeNumber)(_ => "123123"), nodeNumber * 10)
+            .mapPartitions(_ => (0 until 100000).toIterator)
+            .coalesce(nodeNumber)
+            .setName("PartitionRDD")
+            .cache()
+          originRdd.count()
+          originRdd.count()
           // load pytorch library before jep, or libCaffe2.so will conflict.
-          originRdd.map(_ => PytorchModelWrapper.load()).count()
+          originRdd.mapPartitions{
+            _ => PytorchModelWrapper.load()
+            Iterator.single(1)
+          }.count()
           sharedInterpRDD = originRdd.mapPartitions { iter =>
-            val interp = new SharedInterpreter()
+            val interp = getOrCreateInterpreter()
             Iterator.single(interp)
-          }.cache()
+          }.setName("SharedInterpRDD").cache()
           sharedInterpRDD.count()
-          sharedInterpRDD
         }
       }
     }
     sharedInterpRDD
+  }
+
+  private var sharedInterpreter: SharedInterpreter = null
+  def getOrCreateInterpreter(): SharedInterpreter = {
+    if (sharedInterpreter == null) {
+      this.synchronized {
+        if (sharedInterpreter == null) {
+          sharedInterpreter = new SharedInterpreter()
+        }
+      }
+    }
+    sharedInterpreter
   }
 }
 
