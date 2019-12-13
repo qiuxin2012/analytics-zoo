@@ -83,15 +83,15 @@ def main():
     model = Net().to(device)
     # optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
-    num_executors = 1
-    num_cores_per_executor = 4
+    num_executors = 4
+    num_cores_per_executor = 1
     hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
     sc = init_spark_on_yarn(
         hadoop_conf=hadoop_conf_dir,
         conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
         num_executor=num_executors,
         executor_cores=num_cores_per_executor,
-        executor_memory="10g",
+        executor_memory="2g",
         driver_memory="10g",
         driver_cores=1,
         spark_conf={"spark.rpc.message.maxSize": "1024",
