@@ -417,33 +417,70 @@ class PythonLoaderFeatureSet[T: ClassTag](
   override def data(train: Boolean): RDD[T] = {
     val loaderName = this.loaderName
     val iterName = s"${loaderName}_iter"
-    sharedInterp.mapPartitions{ dataIter =>
-      val interp = dataIter.next()
-      val len = interp.getValue(s"len($loaderName)").asInstanceOf[Long]
-      interp.exec(s"${iterName} = enumerate($loaderName)")
-      new Iterator[T] {
-        var i = 0
-        val nextCode =
-          s"""
-            |batch_idx, (data, target) = next($iterName)
-            |""".stripMargin
+    if (train) {
+      sharedInterp.mapPartitions{dataIter =>
+        val interp = dataIter.next()
+        new Iterator[T] {
+          val nextCode =
+            s"""
+               |batch_idx, (data, target) = next($iterName)
+               |""".stripMargin
 
-        override def hasNext: Boolean = {
-          i < len
+          override def hasNext: Boolean = {
+            true
+          }
+
+          override def next(): T = {
+            val stat = System.nanoTime()
+            try {
+              interp.exec(nextCode)
+            } catch {
+              case e: Exception =>
+                if(e.getMessage().contains("StopIteration")) {
+                  interp.exec(s"${iterName} = enumerate($loaderName)")
+                  interp.exec(nextCode)
+                }
+            }
+            val input = interp.getValue("data.numpy()").asInstanceOf[NDArray[Array[Float]]]
+            val target = interp.getValue("target.numpy()").asInstanceOf[NDArray[Array[Long]]]
+            val r = MiniBatch[Float](Tensor[Float](input.getData, input.getDimensions),
+              Tensor[Float](target.getData().map(_.toFloat), target.getDimensions)
+            ).asInstanceOf[T]
+            println(s"${loaderName} next cost ${(System.nanoTime() - stat) / 1e9} s")
+            r
+          }
+        }
+      }
+    } else {
+      sharedInterp.mapPartitions{ dataIter =>
+        val interp = dataIter.next()
+        val len = interp.getValue(s"len($loaderName)").asInstanceOf[Long]
+        interp.exec(s"${iterName} = enumerate($loaderName)")
+        new Iterator[T] {
+          var i = 0
+          val nextCode =
+            s"""
+               |batch_idx, (data, target) = next($iterName)
+               |""".stripMargin
+
+          override def hasNext: Boolean = {
+            i < len
+          }
+
+          override def next(): T = {
+            val stat = System.nanoTime()
+            i += 1
+            interp.exec(nextCode)
+            val input = interp.getValue("data.numpy()").asInstanceOf[NDArray[Array[Float]]]
+            val target = interp.getValue("target.numpy()").asInstanceOf[NDArray[Array[Long]]]
+            val r = MiniBatch[Float](Tensor[Float](input.getData, input.getDimensions),
+              Tensor[Float](target.getData().map(_.toFloat), target.getDimensions)
+            ).asInstanceOf[T]
+            println(s"${loaderName} next cost ${(System.nanoTime() - stat) / 1e9} s")
+            r
+          }
         }
 
-        override def next(): T = {
-          val stat = System.nanoTime()
-          i += 1
-          interp.exec(nextCode)
-          val input = interp.getValue("data.numpy()").asInstanceOf[NDArray[Array[Float]]]
-          val target = interp.getValue("target.numpy()").asInstanceOf[NDArray[Array[Long]]]
-          val r = MiniBatch[Float](Tensor[Float](input.getData, input.getDimensions),
-            Tensor[Float](target.getData().map(_.toFloat), target.getDimensions)
-          ).asInstanceOf[T]
-          println(s"${loaderName} next cost ${(System.nanoTime() - stat) / 1e9} s")
-          r
-        }
       }
     }
 
