@@ -349,7 +349,12 @@ class FeatureSet(DataSet):
         return cls(jvalue=jvalue)
 
     @classmethod
-    def python(cls, dataset, bigdl_type="float"):
+    def data_loader(cls, dataset, bigdl_type="float"):
+        """
+        :param dataset: a pytorch data loader
+        :param bigdl_type: numeric type
+        :return: A feature set
+        """
         import pickle
         by = bytearray(pickle.dumps(dataset))
         jvalue = callZooFunc(bigdl_type, "createFeatureSetFromPython", by)

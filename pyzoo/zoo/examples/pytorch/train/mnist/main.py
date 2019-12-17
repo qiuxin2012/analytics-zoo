@@ -13,6 +13,7 @@ from zoo.common.nncontext import *
 from zoo.feature.common import FeatureSet
 from bigdl.optim.optimizer import Loss
 from zoo.pipeline.api.keras.metrics import Accuracy
+from torchnet.dataset.splitdataset import SplitDataset
 import time
 from zoo.pipeline.api.keras.objectives import SparseCategoricalCrossEntropy
 
@@ -64,6 +65,22 @@ def main():
 
     device = torch.device("cuda" if use_cuda else "cpu")
 
+    # data_set = datasets.MNIST('/tmp/data', train=True, download=True,
+    #                           transform=transforms.Compose([
+    #                               transforms.ToTensor(),
+    #                               transforms.Normalize((0.1307,), (0.3081,))
+    #                           ]))
+    # partitioner = {'1': 0.1, '2': 0.5}
+    # sdata_set = SplitDataset(data_set, partitioner)
+    # sdata_set.select('1')
+    # train_loader = torch.utils.data.DataLoader(
+    #     sdata_set,
+    #     batch_size=args.batch_size, shuffle=True)
+    # print(len(train_loader))
+    # a = enumerate(train_loader)
+    # print(next(a))
+
+
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
     train_loader = torch.utils.data.DataLoader(
         datasets.MNIST('/tmp/data', train=True, download=True,
@@ -83,7 +100,7 @@ def main():
     model = Net().to(device)
     # optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
-    num_executors = 4
+    num_executors = 1
     num_cores_per_executor = 1
     hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
     sc = init_spark_on_yarn(
@@ -110,11 +127,11 @@ def main():
     # from bigdl.nn.criterion import ClassNLLCriterion
     # zooCriterion = ClassNLLCriterion()
     estimator = Estimator(zooModel, optim_methods=adam)
-    train_featureSet = FeatureSet.python(train_loader)
-    test_featureSet = FeatureSet.python(test_loader)
-    c = train_featureSet.to_dataset().size()
-    print(c)
-    print(test_featureSet.to_dataset().size())
+    train_featureSet = FeatureSet.data_loader(train_loader)
+    test_featureSet = FeatureSet.data_loader(test_loader)
+    # c = train_featureSet.to_dataset().size()
+    # print(c)
+    # print(test_featureSet.to_dataset().size())
     # estimator.evaluate_minibatch(train_featureSet, [Accuracy()])
     from bigdl.optim.optimizer import MaxEpoch, EveryEpoch
     estimator.train_minibatch(train_featureSet, zooCriterion, end_trigger=MaxEpoch(10), checkpoint_trigger=EveryEpoch(),
