@@ -326,15 +326,12 @@ class CachedDistributedFeatureSet[T: ClassTag]
 }
 
 object PythonLoaderFeatureSet{
-  def loadPytorchLoader(
+  protected def loadPytorchLoader(
       loaderName: String,
       dataset: Array[Byte],
       interpRdd: RDD[SharedInterpreter]): Unit = {
     val bcDataSet = interpRdd.sparkContext.broadcast(dataset)
     val imports = s"""
-      |import numpy as np
-      |from torchvision import datasets, transforms
-      |import torch
       |import pickle
       |""".stripMargin
     val load = s"""
@@ -346,18 +343,16 @@ object PythonLoaderFeatureSet{
       interp.exec(imports)
       interp.set("pyjarray", bcDataSet.value)
       interp.exec(load)
-      interp.exec("by = bytes(b % 256 for b in pyjarray)")
-      interp.exec("loader = pickle.loads(by)")
       Iterator.single(interp)
     }.count()
 
   }
 
-  private var sharedInterpRDD: RDD[SharedInterpreter] = null
-  def getOrCreateInterpRdd(): RDD[SharedInterpreter] = {
-    if (sharedInterpRDD == null) {
+  private var jepRDD: RDD[SharedInterpreter] = null
+  protected def getOrCreateInterpRdd(): RDD[SharedInterpreter] = {
+    if (jepRDD == null) {
       this.synchronized {
-        if (sharedInterpRDD == null) {
+        if (jepRDD == null) {
           println("creating interp RDD")
           val sc = SparkContext.getOrCreate()
           val nodeNumber = EngineRef.getNodeNumber()
@@ -375,19 +370,19 @@ object PythonLoaderFeatureSet{
             _ => PytorchModelWrapper.load()
             Iterator.single(1)
           }.count()
-          sharedInterpRDD = originRdd.mapPartitions { iter =>
+          jepRDD = originRdd.mapPartitions { iter =>
             val interp = getOrCreateInterpreter()
             Iterator.single(interp)
           }.setName("SharedInterpRDD").cache()
-          sharedInterpRDD.count()
+          jepRDD.count()
         }
       }
     }
-    sharedInterpRDD
+    jepRDD
   }
 
   private var sharedInterpreter: SharedInterpreter = null
-  def getOrCreateInterpreter(): SharedInterpreter = {
+  protected def getOrCreateInterpreter(): SharedInterpreter = {
     if (sharedInterpreter == null) {
       this.synchronized {
         if (sharedInterpreter == null) {
