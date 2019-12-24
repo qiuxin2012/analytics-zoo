@@ -17,6 +17,7 @@
 package com.intel.analytics.zoo.feature
 
 import java.nio.file.Paths
+import java.util
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.intel.analytics.bigdl.DataSet
@@ -34,6 +35,7 @@ import org.slf4j.{Logger, LoggerFactory}
 import jep._
 
 import scala.reflect.ClassTag
+import scala.collection.JavaConverters._
 
 /**
  * A set of data which is used in the model optimization process. The FeatureSet can be access in
@@ -333,6 +335,26 @@ object PythonLoaderFeatureSet{
     val bcDataSet = interpRdd.sparkContext.broadcast(dataset)
     val imports = s"""
       |import pickle
+      |import numpy as np
+      |
+      |def tensor_to_numpy(elements):
+      |    if isinstance(elements, np.ndarray):
+      |        return elements
+      |    elif isinstance(elements, list):
+      |        return tensor_to_list_of_numpy(elements)
+      |    elif isinstance(elements, str):
+      |        return elements
+      |    else:
+      |        return elements.numpy()
+      |    results = []
+      |    for element in elements:
+      |        results += tensor_to_list_of_numpy(element)
+      |    return results
+      |
+      |
+      |def tuple_to_numpy(data):
+      |    return tuple([tensor_to_numpy(d) for d in data])
+      |
       |""".stripMargin
     val load = s"""
       |by = bytes(b % 256 for b in pyjarray)
@@ -392,6 +414,43 @@ object PythonLoaderFeatureSet{
     }
     sharedInterpreter
   }
+
+  protected def toMiniBatch(data: AnyRef): MiniBatch[_] = {
+    require(data.isInstanceOf[util.Collection[_]])
+    val tuple = data.asInstanceOf[util.Collection[_]].toArray()
+    require(tuple.length == 2)
+    MiniBatch(toArrayTensor(tuple(0)), toArrayTensor(tuple(1)))
+  }
+
+  protected def toArrayTensor(
+        data: AnyRef): Array[Tensor[Float]] = {
+    data match {
+      case ndArray: NDArray[_] =>
+        Array(ndArrayToTensor(ndArray))
+      case ndArrays: util.ArrayList[_] =>
+        require(ndArrays.size() > 0)
+        ndArrays.get(0) match {
+          case _: NDArray[_] =>
+            ndArrays.asInstanceOf[util.ArrayList[NDArray[_]]].asScala.toArray.map { input =>
+              ndArrayToTensor(input)
+            }
+          // TODO: support ArrayList[String]
+        }
+      case _ =>
+        throw new IllegalArgumentException("")
+    }
+  }
+
+  protected def ndArrayToTensor(ndArray: NDArray[_]): Tensor[Float] = {
+    val array = ndArray.asInstanceOf[NDArray[Array[_]]]
+    val data = array.getData()
+    data(0) match{
+      case _: Float =>
+        Tensor[Float](data.asInstanceOf[Array[Float]], array.getDimensions)
+      case _ =>
+        Tensor[Float](data.map(_.toString.toFloat), array.getDimensions)
+    }
+  }
 }
 
 class PythonLoaderFeatureSet[T: ClassTag](
@@ -418,7 +477,7 @@ class PythonLoaderFeatureSet[T: ClassTag](
         new Iterator[T] {
           val nextCode =
             s"""
-               |batch_idx, (data, target) = next($iterName)
+               |batch_idx, data = next($iterName)
                |""".stripMargin
 
           override def hasNext: Boolean = {
@@ -436,13 +495,18 @@ class PythonLoaderFeatureSet[T: ClassTag](
                   interp.exec(nextCode)
                 }
             }
-            val input = interp.getValue("data.numpy()").asInstanceOf[NDArray[Array[Float]]]
-            val target = interp.getValue("target.numpy()").asInstanceOf[NDArray[Array[Long]]]
-            val r = MiniBatch[Float](Tensor[Float](input.getData, input.getDimensions),
-              Tensor[Float](target.getData().map(_.toFloat), target.getDimensions)
-            ).asInstanceOf[T]
+            val data = interp.getValue("tuple_to_numpy(data)")
+            val miniBatch = toMiniBatch(data)
+
+//            val input = interp.getValue("data.numpy()").asInstanceOf[NDArray[Array[Float]]]
+//            val target = interp.getValue("target.numpy()").asInstanceOf[NDArray[Array[Long]]]
+//            val r = MiniBatch[Float](Tensor[Float](input.getData, input.getDimensions),
+//              Tensor[Float](target.getData().map(_.toFloat), target.getDimensions)
+//            ).asInstanceOf[T]
+//            println(s"${loaderName} next cost ${(System.nanoTime() - stat) / 1e9} s")
+//            r
             println(s"${loaderName} next cost ${(System.nanoTime() - stat) / 1e9} s")
-            r
+            miniBatch.asInstanceOf[T]
           }
         }
       }
