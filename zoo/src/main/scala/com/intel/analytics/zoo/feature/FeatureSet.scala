@@ -328,41 +328,40 @@ class CachedDistributedFeatureSet[T: ClassTag]
 }
 
 object PythonLoaderFeatureSet{
+  val imports = s"""
+                   |import pickle
+                   |import numpy as np
+                   |
+                   |def tensor_to_numpy(elements):
+                   |    if isinstance(elements, np.ndarray):
+                   |        return elements
+                   |    elif isinstance(elements, list):
+                   |        return tensor_to_list_of_numpy(elements)
+                   |    elif isinstance(elements, str):
+                   |        return elements
+                   |    else:
+                   |        return elements.numpy()
+                   |    results = []
+                   |    for element in elements:
+                   |        results += tensor_to_list_of_numpy(element)
+                   |    return results
+                   |
+                   |
+                   |def tuple_to_numpy(data):
+                   |    return tuple([tensor_to_numpy(d) for d in data])
+                   |
+                   |""".stripMargin
   protected def loadPytorchLoader(
       loaderName: String,
       dataset: Array[Byte],
       interpRdd: RDD[SharedInterpreter]): Unit = {
     val bcDataSet = interpRdd.sparkContext.broadcast(dataset)
-    val imports = s"""
-      |import pickle
-      |import numpy as np
-      |
-      |def tensor_to_numpy(elements):
-      |    if isinstance(elements, np.ndarray):
-      |        return elements
-      |    elif isinstance(elements, list):
-      |        return tensor_to_list_of_numpy(elements)
-      |    elif isinstance(elements, str):
-      |        return elements
-      |    else:
-      |        return elements.numpy()
-      |    results = []
-      |    for element in elements:
-      |        results += tensor_to_list_of_numpy(element)
-      |    return results
-      |
-      |
-      |def tuple_to_numpy(data):
-      |    return tuple([tensor_to_numpy(d) for d in data])
-      |
-      |""".stripMargin
     val load = s"""
       |by = bytes(b % 256 for b in pyjarray)
       |${loaderName} = pickle.loads(by)
       |""".stripMargin
     interpRdd.mapPartitions{iter =>
       val interp = iter.next()
-      interp.exec(imports)
       interp.set("pyjarray", bcDataSet.value)
       interp.exec(load)
       Iterator.single(interp)
@@ -404,11 +403,12 @@ object PythonLoaderFeatureSet{
   }
 
   private var sharedInterpreter: SharedInterpreter = null
-  protected def getOrCreateInterpreter(): SharedInterpreter = {
+  private[zoo] def getOrCreateInterpreter(): SharedInterpreter = {
     if (sharedInterpreter == null) {
       this.synchronized {
         if (sharedInterpreter == null) {
           sharedInterpreter = new SharedInterpreter()
+          sharedInterpreter.exec(imports)
         }
       }
     }
@@ -441,7 +441,7 @@ object PythonLoaderFeatureSet{
     }
   }
 
-  protected def ndArrayToTensor(ndArray: NDArray[_]): Tensor[Float] = {
+  private[zoo] def ndArrayToTensor(ndArray: NDArray[_]): Tensor[Float] = {
     val array = ndArray.asInstanceOf[NDArray[Array[_]]]
     val data = array.getData()
     data(0) match{

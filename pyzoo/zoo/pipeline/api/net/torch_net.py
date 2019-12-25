@@ -31,6 +31,23 @@ if sys.version >= '3':
     long = int
     unicode = str
 
+class TorchNet2(Layer):
+    """
+    TorchNet wraps a TorchScript model as a single layer, thus the Pytorch model can be used for
+    distributed inference or training.
+    :param path: path to the TorchScript model.
+    """
+
+    def __init__(self, module_bytes, bigdl_type="float"):
+        super(TorchNet, self).__init__(None, bigdl_type, module_bytes)
+
+    @staticmethod
+    def from_pytorch(module):
+        import pickle
+        bys = pickle.dumps(module)
+        net = TorchNet2(bys)
+
+        return net
 
 class TorchNet(Layer):
     """

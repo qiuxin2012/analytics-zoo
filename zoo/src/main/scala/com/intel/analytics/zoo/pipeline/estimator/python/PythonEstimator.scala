@@ -50,6 +50,12 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
     Estimator(model, optimMethods.asScala.toMap, modelDir)
   }
 
+  def createPytorchEstimator(model: Array[Byte],
+                             optimMethod: OptimMethod[T],
+                             modelDir: String): Unit = {
+    Estimator(model, optimMethod, modelDir)
+  }
+
   def estimatorEvaluate(estimator: Estimator[T], validationSet: FeatureSet[Sample[T]],
                         validationMethod: JList[ValidationMethod[T]], batchSize: Int
                        ): Map[ValidationMethod[T], ValidationResult] = {
