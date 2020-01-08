@@ -24,6 +24,7 @@ import com.intel.analytics.bigdl.DataSet
 import com.intel.analytics.bigdl.dataset.{AbstractDataSet, DistributedDataSet, MiniBatch, Transformer}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.utils.RandomGenerator
+import com.intel.analytics.zoo.core.TFNetNative
 import com.intel.analytics.zoo.feature.common.{ArrayLike, ArrayLikeWrapper}
 import com.intel.analytics.zoo.feature.pmem._
 import com.intel.analytics.zoo.pipeline.api.keras.layers.utils.EngineRef
@@ -326,15 +327,18 @@ class CachedDistributedFeatureSet[T: ClassTag]
     new DistributedDataSetWrapper[T](this)
   }
 }
+import py4j.Base64
 
 object PythonLoaderFeatureSet{
   protected def loadPytorchLoader(
       loaderName: String,
       dataset: Array[Byte],
+      imports: String,
+      batchSize: Int,
       interpRdd: RDD[SharedInterpreter]): Unit = {
     val bcDataSet = interpRdd.sparkContext.broadcast(dataset)
-    val imports = s"""
-      |import pickle
+    val preimports = s"""
+      |from pyspark.serializers import CloudPickleSerializer
       |import numpy as np
       |
       |def tensor_to_numpy(elements):
@@ -351,18 +355,17 @@ object PythonLoaderFeatureSet{
       |        results += tensor_to_list_of_numpy(element)
       |    return results
       |
-      |
       |def tuple_to_numpy(data):
       |    return tuple([tensor_to_numpy(d) for d in data])
-      |
-      |""".stripMargin
+      |""".stripMargin + imports
     val load = s"""
       |by = bytes(b % 256 for b in pyjarray)
-      |${loaderName} = pickle.loads(by)
+      |function = CloudPickleSerializer.loads(CloudPickleSerializer, by)
+      |${loaderName} = function().batch(${batchSize})
       |""".stripMargin
     interpRdd.mapPartitions{iter =>
       val interp = iter.next()
-      interp.exec(imports)
+      interp.exec(preimports)
       interp.set("pyjarray", bcDataSet.value)
       interp.exec(load)
       Iterator.single(interp)
@@ -389,7 +392,8 @@ object PythonLoaderFeatureSet{
           originRdd.count()
           // load pytorch library before jep, or libCaffe2.so will conflict.
           originRdd.mapPartitions{
-            _ => PytorchModelWrapper.load()
+//            _ => PytorchModelWrapper.load()
+            _ => TFNetNative.isLoaded
             Iterator.single(1)
           }.count()
           jepRDD = originRdd.mapPartitions { iter =>
@@ -408,6 +412,9 @@ object PythonLoaderFeatureSet{
     if (sharedInterpreter == null) {
       this.synchronized {
         if (sharedInterpreter == null) {
+          val config: JepConfig = new JepConfig()
+          config.setClassEnquirer(new NamingConventionClassEnquirer())
+          SharedInterpreter.setConfig(config)
           sharedInterpreter = new SharedInterpreter()
         }
       }
@@ -455,15 +462,19 @@ object PythonLoaderFeatureSet{
 
 class PythonLoaderFeatureSet[T: ClassTag](
     dataset: Array[Byte],
-    inputs: Array[String],
-    outputs: Array[String]) extends DistributedFeatureSet[T] {
+    getIterator: (String, String) => String,
+    getNext: (String) => String,
+    inputName: String,
+    targetName: String = "",
+    batchSize: Int,
+    imports: String = "") extends DistributedFeatureSet[T] {
   import PythonLoaderFeatureSet._
   protected val namePostfix = Integer.toHexString(java.util.UUID.randomUUID().hashCode())
   protected val loaderName = s"loader${namePostfix}"
   println(dataset.length)
 
   val sharedInterp = getOrCreateInterpRdd()
-  loadPytorchLoader(loaderName, dataset, sharedInterp)
+  loadPytorchLoader(loaderName, dataset, imports, batchSize, sharedInterp)
   override def originRDD(): RDD[_] = {
     sharedInterp
   }
@@ -471,14 +482,16 @@ class PythonLoaderFeatureSet[T: ClassTag](
   override def data(train: Boolean): RDD[T] = {
     val loaderName = this.loaderName
     val iterName = s"${loaderName}_iter"
+    val inputName = this.inputName
+    val targetName = this.targetName
+    val getNext = this.getNext
+    val getIterator = this.getIterator
     if (train) {
       sharedInterp.mapPartitions{dataIter =>
         val interp = dataIter.next()
         new Iterator[T] {
-          val nextCode =
-            s"""
-               |batch_idx, data = next($iterName)
-               |""".stripMargin
+          val nextCode = getNext(iterName)
+          val getIteratorCode = getIterator(iterName, loaderName)
 
           override def hasNext: Boolean = {
             true
@@ -490,21 +503,19 @@ class PythonLoaderFeatureSet[T: ClassTag](
               interp.exec(nextCode)
             } catch {
               case e: Exception =>
-                if(e.getMessage().contains("StopIteration")) {
-                  interp.exec(s"${iterName} = enumerate($loaderName)")
+                if(e.getMessage().contains("StopIteration")||
+                  e.getMessage().contains("End of sequence")) {
+                  interp.exec(getIteratorCode)
                   interp.exec(nextCode)
                 }
             }
-            val data = interp.getValue("tuple_to_numpy(data)")
-            val miniBatch = toMiniBatch(data)
-
-//            val input = interp.getValue("data.numpy()").asInstanceOf[NDArray[Array[Float]]]
-//            val target = interp.getValue("target.numpy()").asInstanceOf[NDArray[Array[Long]]]
-//            val r = MiniBatch[Float](Tensor[Float](input.getData, input.getDimensions),
-//              Tensor[Float](target.getData().map(_.toFloat), target.getDimensions)
-//            ).asInstanceOf[T]
-//            println(s"${loaderName} next cost ${(System.nanoTime() - stat) / 1e9} s")
-//            r
+            val inputs = toArrayTensor(interp.getValue(inputName))
+            val miniBatch = if (targetName != "") {
+              val targets = toArrayTensor(interp.getValue(inputName))
+              MiniBatch[Float](inputs, targets)
+            } else {
+              MiniBatch[Float](inputs)
+            }
             println(s"${loaderName} next cost ${(System.nanoTime() - stat) / 1e9} s")
             miniBatch.asInstanceOf[T]
           }
@@ -513,30 +524,45 @@ class PythonLoaderFeatureSet[T: ClassTag](
     } else {
       sharedInterp.mapPartitions{ dataIter =>
         val interp = dataIter.next()
-        val len = interp.getValue(s"len($loaderName)").asInstanceOf[Long]
-        interp.exec(s"${iterName} = enumerate($loaderName)")
+        interp.exec(getIterator(iterName, loaderName))
         new Iterator[T] {
-          var i = 0
-          val nextCode =
-            s"""
-               |batch_idx, (data, target) = next($iterName)
-               |""".stripMargin
+          val nextCode = getNext(iterName)
+          var alreadyNext = false
 
           override def hasNext: Boolean = {
-            i < len
+            try{
+              if (!alreadyNext) {
+                interp.exec(nextCode)
+                alreadyNext = true
+              }
+              true
+            }catch {
+              case e: Exception =>
+                if(e.getMessage().contains("StopIteration") ||
+                e.getMessage().contains("End of sequence")) {
+                  false
+                } else {
+                  throw e
+                }
+            }
+
           }
 
           override def next(): T = {
             val stat = System.nanoTime()
-            i += 1
-            interp.exec(nextCode)
-            val input = interp.getValue("data.numpy()").asInstanceOf[NDArray[Array[Float]]]
-            val target = interp.getValue("target.numpy()").asInstanceOf[NDArray[Array[Long]]]
-            val r = MiniBatch[Float](Tensor[Float](input.getData, input.getDimensions),
-              Tensor[Float](target.getData().map(_.toFloat), target.getDimensions)
-            ).asInstanceOf[T]
+            if (!alreadyNext) {
+              interp.exec(nextCode)
+            }
+            val inputs = toArrayTensor(interp.getValue(inputName))
+            val miniBatch = if (targetName != "") {
+              val targets = toArrayTensor(interp.getValue(inputName))
+              MiniBatch[Float](inputs, targets)
+            } else {
+              MiniBatch[Float](inputs)
+            }
+            alreadyNext = false
             println(s"${loaderName} next cost ${(System.nanoTime() - stat) / 1e9} s")
-            r
+            miniBatch.asInstanceOf[T]
           }
         }
 
@@ -661,9 +687,14 @@ object FeatureSet {
   val logger: Logger = LoggerFactory.getLogger(this.getClass)
   private[zoo] def python[T: ClassTag](
       dataset: Array[Byte],
-      inputs: Array[String],
-      targets: Array[String]): PythonLoaderFeatureSet[T] = {
-    new PythonLoaderFeatureSet[T](dataset, inputs, targets)
+      getIterator: (String, String) => String,
+      getNext: (String) => String,
+      inputName: String,
+      targetName: String,
+      batchSize: Int,
+      imports: String = ""): PythonLoaderFeatureSet[T] = {
+    new PythonLoaderFeatureSet[T](dataset, getIterator, getNext,
+      inputName, targetName, batchSize, imports)
   }
 
   def rdd[T: ClassTag](

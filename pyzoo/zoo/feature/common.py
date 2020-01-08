@@ -18,6 +18,7 @@ from bigdl.util.common import *
 from zoo.common.utils import callZooFunc
 from bigdl.dataset.dataset import DataSet
 import sys
+from pyspark.serializers import CloudPickleSerializer
 
 if sys.version >= '3':
     long = int
@@ -349,6 +350,17 @@ class FeatureSet(DataSet):
         return cls(jvalue=jvalue)
 
     @classmethod
+    def tf_dataset(cls, dataset, batch_size, bigdl_type="float"):
+        """
+        :param dataset: a pytorch data loader
+        :param bigdl_type: numeric type
+        :return: A feature set
+        """
+        dataset = CloudPickleSerializer.dumps(CloudPickleSerializer, dataset)
+        jvalue = callZooFunc(bigdl_type, "createFeatureSetFromTfDataset", dataset, batch_size)
+        return cls(jvalue=jvalue)
+
+    @classmethod
     def data_loader(cls, dataset, bigdl_type="float"):
         """
         :param dataset: a pytorch data loader
@@ -357,7 +369,7 @@ class FeatureSet(DataSet):
         """
         import pickle
         by = bytearray(pickle.dumps(dataset))
-        jvalue = callZooFunc(bigdl_type, "createFeatureSetFromPython", by)
+        jvalue = callZooFunc(bigdl_type, "createFeatureSetFromDataLoader", by)
         return cls(jvalue=jvalue)
 
     def transform(self, transformer):

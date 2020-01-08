@@ -75,8 +75,50 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
     featureSet.toDataSet()
   }
 
-  def createFeatureSetFromPython(dataset: Array[Byte]): FeatureSet[MiniBatch[Float]] = {
-    FeatureSet.python[MiniBatch[Float]](dataset, Array("data"), Array("target"))
+  def createFeatureSetFromTfDataset(dataset: Array[Byte], batchSize: Int): FeatureSet[MiniBatch[Float]] = {
+    val imports =
+      """
+        |import tensorflow as tf
+        |sess = tf.Session()
+        |def flatten(seq):
+        |    if isinstance(seq, list):
+        |        return seq
+        |    if isinstance(seq, tuple):
+        |        seq = list(seq)
+        |        results = []
+        |        for item in seq:
+        |            results.extend(flatten(item))
+        |        return results
+        |    if isinstance(seq, dict):
+        |        sorted_keys = sorted(seq.keys())
+        |        return [seq[v] for v in sorted_keys]
+        |    return [seq]
+        |""".stripMargin
+    def getIterator(iterName: String, loaderName: String): String = {
+      s"""
+         |${iterName} = ${loaderName}.make_one_shot_iterator()
+         |""".stripMargin
+    }
+    def getNext(iterName: String): String = {
+      s"""
+        |data = sess.run(${iterName}.get_next())
+        |data = flatten(data)
+        |""".stripMargin
+    }
+    FeatureSet.python[MiniBatch[Float]](dataset,
+      getIterator, getNext,
+      "data", "", batchSize, imports)
+  }
+
+  def createFeatureSetFromDataLoader(dataset: Array[Byte]): FeatureSet[MiniBatch[Float]] = {
+    // TODO
+    def getIterator(iterName: String, loaderName: String): String = {
+      ""
+    }
+    def getNext(iterName: String): String = {
+      ""
+    }
+    FeatureSet.python[MiniBatch[Float]](dataset, getIterator, getNext, "data", "target", 1)
   }
 
   def size(featureSet: DataSet[MiniBatch[Float]]): Long = {
