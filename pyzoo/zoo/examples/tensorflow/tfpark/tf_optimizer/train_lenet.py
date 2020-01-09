@@ -71,7 +71,6 @@ def main(max_epoch, data_num):
                     "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
 
     dataset = TFDataset.from_dataset(trainfunc,
-                                     names=["features", "labels"],
                                      features=(tf.float32, [28, 28, 1]),
                                      labels=(tf.int32, []),
                                      batch_size=280,

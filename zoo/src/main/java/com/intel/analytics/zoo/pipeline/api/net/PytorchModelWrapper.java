@@ -15,7 +15,7 @@ import static java.nio.channels.Channels.newChannel;
 /**
  * Developer API for now, intentionally remove public visibility
  */
-public class PytorchModelWrapper {
+class PytorchModelWrapper {
   static JTensor[] modelForwardNative(
           long nativeRef, boolean isTraining, float[][] storage, int[] offset, int[][] shape) {
     return (JTensor[]) PytorchModel.modelForwardNative(nativeRef, isTraining,
@@ -38,8 +38,4 @@ public class PytorchModelWrapper {
     return (JTensor[]) PytorchModel.lossBackwardNative(nativeRef);
   }
 
-  public static Boolean load() {
-    PytorchModel.load();
-    return PytorchModel.isLoaded();
-  }
 }

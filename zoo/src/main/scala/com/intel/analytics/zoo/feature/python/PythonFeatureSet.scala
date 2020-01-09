@@ -110,19 +110,4 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
       "data", "", batchSize, imports)
   }
 
-  def createFeatureSetFromDataLoader(dataset: Array[Byte]): FeatureSet[MiniBatch[Float]] = {
-    // TODO
-    def getIterator(iterName: String, loaderName: String): String = {
-      ""
-    }
-    def getNext(iterName: String): String = {
-      ""
-    }
-    FeatureSet.python[MiniBatch[Float]](dataset, getIterator, getNext, "data", "target", 1)
-  }
-
-  def size(featureSet: DataSet[MiniBatch[Float]]): Long = {
-    featureSet.size()
-  }
-
 }

@@ -671,10 +671,6 @@ class TFFeatureSetDataset(TFDataset):
         # TODO: throw exception if dataset is repeated
         self.dataset = FeatureSet.tf_dataset(dataset, batch_size)
         self.validation_dataset = FeatureSet.tf_dataset(validation_dataset, batch_size)
-        print("----------------------------dataset size: ----------------------------------")
-        # print(self.dataset.size())
-        print("------------------------validation dataset size: ------------------------------------")
-        # print(self.validation_dataset.size())
 
     def get_prediction_data(self):
         raise Exception("TFFeatureSetDataset is only supported in training")

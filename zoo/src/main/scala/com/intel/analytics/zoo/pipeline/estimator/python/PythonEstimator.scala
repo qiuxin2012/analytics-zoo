@@ -107,14 +107,6 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
   }
 
 
-  def estimatorEvaluateMiniBatch(
-      estimator: Estimator[T],
-      validationMiniBatch: FeatureSet[MiniBatch[T]],
-      validationMethod: JList[ValidationMethod[T]]
-      ): Map[ValidationMethod[T], ValidationResult] = {
-    estimator.evaluate(validationMiniBatch, validationMethod.asScala.toArray)
-  }
-
   def estimatorTrainImageFeature(estimator: Estimator[T],
                                  trainSet: FeatureSet[ImageFeature],
                                  criterion: Criterion[T],

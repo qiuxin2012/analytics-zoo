@@ -327,7 +327,6 @@ class CachedDistributedFeatureSet[T: ClassTag]
     new DistributedDataSetWrapper[T](this)
   }
 }
-import py4j.Base64
 
 object PythonLoaderFeatureSet{
   protected def loadPytorchLoader(
@@ -340,23 +339,6 @@ object PythonLoaderFeatureSet{
     val preimports = s"""
       |from pyspark.serializers import CloudPickleSerializer
       |import numpy as np
-      |
-      |def tensor_to_numpy(elements):
-      |    if isinstance(elements, np.ndarray):
-      |        return elements
-      |    elif isinstance(elements, list):
-      |        return tensor_to_list_of_numpy(elements)
-      |    elif isinstance(elements, str):
-      |        return elements
-      |    else:
-      |        return elements.numpy()
-      |    results = []
-      |    for element in elements:
-      |        results += tensor_to_list_of_numpy(element)
-      |    return results
-      |
-      |def tuple_to_numpy(data):
-      |    return tuple([tensor_to_numpy(d) for d in data])
       |""".stripMargin + imports
     val load = s"""
       |by = bytes(b % 256 for b in pyjarray)
@@ -390,9 +372,7 @@ object PythonLoaderFeatureSet{
             .cache()
           originRdd.count()
           originRdd.count()
-          // load pytorch library before jep, or libCaffe2.so will conflict.
           originRdd.mapPartitions{
-//            _ => PytorchModelWrapper.load()
             _ => TFNetNative.isLoaded
             Iterator.single(1)
           }.count()
@@ -420,13 +400,6 @@ object PythonLoaderFeatureSet{
       }
     }
     sharedInterpreter
-  }
-
-  protected def toMiniBatch(data: AnyRef): MiniBatch[_] = {
-    require(data.isInstanceOf[util.Collection[_]])
-    val tuple = data.asInstanceOf[util.Collection[_]].toArray()
-    require(tuple.length == 2)
-    MiniBatch(toArrayTensor(tuple(0)), toArrayTensor(tuple(1)))
   }
 
   protected def toArrayTensor(
@@ -545,7 +518,6 @@ class PythonLoaderFeatureSet[T: ClassTag](
                   throw e
                 }
             }
-
           }
 
           override def next(): T = {

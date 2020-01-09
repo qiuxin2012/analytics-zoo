@@ -22,7 +22,6 @@ import sys
 from tensorflow.keras.models import Model
 
 
-
 def main(max_epoch, data_num):
     num_executors = 1
     num_cores_per_executor = 1
@@ -47,7 +46,7 @@ def main(max_epoch, data_num):
                                  features=(tf.float32, [28, 28, 1]),
                                  labels=(tf.int32, []),
                                  batch_size=280,
-                                 val_dataset=testfunc()
+                                 val_dataset=testfunc
                                  )
 
     from tensorflow.keras.layers import Input, Flatten, Dense
@@ -79,3 +78,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         max_epoch = int(sys.argv[1])
         data_num = int(sys.argv[2])
+    main(max_epoch, data_num)
