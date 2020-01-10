@@ -664,13 +664,15 @@ class TFFeatureDataset(TFDataset):
 
 class TFFeatureSetDataset(TFDataset):
 
-    def __init__(self, dataset, tensor_structure, batch_size,
-                 batch_per_thread, hard_code_batch_size=False, validation_dataset=None):
+    def __init__(self, dataset, train_dataset_size, tensor_structure,
+                 batch_size=100, batch_per_thread=-1,
+                 val_dataset=None, val_dataset_size=-2):
         super(TFFeatureSetDataset, self).__init__(tensor_structure, batch_size,
-                                                  batch_per_thread, hard_code_batch_size)
+                                                  batch_per_thread)
         # TODO: throw exception if dataset is repeated
-        self.dataset = FeatureSet.tf_dataset(dataset, batch_size)
-        self.validation_dataset = FeatureSet.tf_dataset(validation_dataset, batch_size)
+        self.dataset = FeatureSet.tf_dataset(dataset, train_dataset_size)
+        if val_dataset is not None:
+            self.val_dataset = FeatureSet.tf_dataset(val_dataset, val_dataset_size)
 
     def get_prediction_data(self):
         raise Exception("TFFeatureSetDataset is only supported in training")
@@ -682,19 +684,19 @@ class TFFeatureSetDataset(TFDataset):
         return self.dataset
 
     def get_validation_data(self):
-        if self.validation_dataset is not None:
-            return self.validation_dataset
+        if self.val_dataset is not None:
+            return self.val_dataset
         return None
 
     def get_num_partitions(self):
         raise NotImplementedError()
 
     @staticmethod
-    def from_dataset(train_dataset, names=None, shapes=None, types=None,
-                 batch_size=-1, batch_per_thread=-1,
-                 hard_code_batch_size=False, val_dataset=None,
-                 features=None, labels=None,
-                 shuffle=True):
+    def from_dataset(train_dataset, train_dataset_size=-2, names=None,
+                     shapes=None, types=None,
+                     val_dataset=None, val_dataset_size=-2,
+                     features=None, labels=None,
+                     shuffle=True):
         import tensorflow as tf
 
         if features is not None:
@@ -706,9 +708,8 @@ class TFFeatureSetDataset(TFDataset):
             else:
                 tensor_structure = (feature_structure,)
 
-            return TFFeatureSetDataset(train_dataset, tensor_structure,
-                                    batch_size, batch_per_thread,
-                                    hard_code_batch_size, val_dataset)
+            return TFFeatureSetDataset(train_dataset, train_dataset_size, tensor_structure,
+                                       val_dataset=val_dataset, val_dataset_size=val_dataset_size)
 
         if names is not None or shapes is not None or types is not None:
             if not names:
@@ -724,9 +725,8 @@ class TFFeatureSetDataset(TFDataset):
         else:
             tensor_structure = [TensorMeta(dtype=tf.float32), TensorMeta(dtype=tf.float32)]
 
-        return TFFeatureSetDataset(train_dataset, tensor_structure,
-                                batch_size, batch_per_thread,
-                                hard_code_batch_size, val_dataset)
+        return TFFeatureSetDataset(train_dataset, train_dataset_size, tensor_structure,
+                                   val_dataset=val_dataset, val_dataset_size=val_dataset_size)
 
 
 class TFBytesDataset(TFDataset):

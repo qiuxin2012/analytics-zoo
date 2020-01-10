@@ -37,7 +37,7 @@ def trainfunc():
         return tf.data.Dataset.from_generator(gen, (tf.float32, tf.int32), ((28, 28, 1), ()))
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data("/tmp/mnist")
     x_train.resize(60000, 28, 28, 1)
-    return create_mnist_dataset(x_train, y_train)
+    return create_mnist_dataset(x_train, y_train).batch(1111)
 
 
 def testfunc():
@@ -51,11 +51,11 @@ def testfunc():
         return tf.data.Dataset.from_generator(gen, (tf.float32, tf.int32), ((28, 28, 1), ()))
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data("/tmp/mnist")
     x_test.resize(10000, 28, 28, 1)
-    return create_mnist_dataset(x_test, y_test)
+    return create_mnist_dataset(x_test, y_test).batch(300)
 
 
 def main(max_epoch, data_num):
-    num_executors = 1
+    num_executors = 2
     num_cores_per_executor = 1
     hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
     sc = init_spark_on_yarn(
@@ -71,10 +71,11 @@ def main(max_epoch, data_num):
                     "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
 
     dataset = TFDataset.from_dataset(trainfunc,
+                                     train_dataset_size=60000,
                                      features=(tf.float32, [28, 28, 1]),
                                      labels=(tf.int32, []),
-                                     batch_size=280,
-                                     val_dataset=testfunc
+                                     val_dataset=testfunc,
+                                     val_dataset_size=10000
                                      )
 
     # construct the model from TFDataset
@@ -91,7 +92,7 @@ def main(max_epoch, data_num):
                                       val_labels=[labels],
                                       val_method=Top1Accuracy(), model_dir="/tmp/lenet/")
     # kick off training
-    optimizer.optimize(end_trigger=MaxEpoch(max_epoch))
+    optimizer.optimize(end_trigger=MaxEpoch(2))
 
     saver = tf.train.Saver()
     saver.save(optimizer.sess, "/tmp/lenet/model")

@@ -29,7 +29,7 @@ import com.intel.analytics.zoo.feature.common.{ArrayLike, ArrayLikeWrapper}
 import com.intel.analytics.zoo.feature.pmem._
 import com.intel.analytics.zoo.pipeline.api.keras.layers.utils.EngineRef
 import com.intel.analytics.zoo.pipeline.api.net.{PytorchModel, PytorchModelWrapper}
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.slf4j.{Logger, LoggerFactory}
@@ -329,11 +329,26 @@ class CachedDistributedFeatureSet[T: ClassTag]
 }
 
 object PythonLoaderFeatureSet{
+  protected def getBatchSize(interpRdd: RDD[SharedInterpreter],
+                             loaderName: String,
+                             inputName: String,
+                             getIterator: (String, String, Int) => String,
+                             getNext: (String) => String): Int = {
+    val iterName = "findBatchSize" + System.nanoTime()
+    interpRdd.mapPartitions{dataIter =>
+      val interp = dataIter.next()
+      interp.exec(getIterator(iterName, loaderName, 0))
+      interp.exec(getNext(iterName))
+      val inputs = toArrayTensor(interp.getValue(inputName))
+      val miniBatch = MiniBatch[Float](inputs)
+      Iterator.single(miniBatch)
+    }.first().size()
+  }
+
   protected def loadPytorchLoader(
-      loaderName: String,
+                                     loaderName: String,
       dataset: Array[Byte],
       imports: String,
-      batchSize: Int,
       interpRdd: RDD[SharedInterpreter]): Unit = {
     val bcDataSet = interpRdd.sparkContext.broadcast(dataset)
     val preimports = s"""
@@ -342,8 +357,8 @@ object PythonLoaderFeatureSet{
       |""".stripMargin + imports
     val load = s"""
       |by = bytes(b % 256 for b in pyjarray)
-      |function = CloudPickleSerializer.loads(CloudPickleSerializer, by)
-      |${loaderName} = function().batch(${batchSize})
+      |func = CloudPickleSerializer.loads(CloudPickleSerializer, by)
+      |${loaderName} = func()
       |""".stripMargin
     interpRdd.mapPartitions{iter =>
       val interp = iter.next()
@@ -365,12 +380,11 @@ object PythonLoaderFeatureSet{
           val nodeNumber = EngineRef.getNodeNumber()
           // TODO: make sure 1 executor 1 partition
           val originRdd = sc.parallelize(
-            Array.tabulate(nodeNumber)(_ => "123123"), nodeNumber * 10)
-            .mapPartitions(_ => (0 until 100000).toIterator)
+            Array.tabulate(nodeNumber)(_ => "dummy123123"), nodeNumber * 10)
+            .mapPartitions(_ => (0 until 10000000).toIterator)
             .coalesce(nodeNumber)
             .setName("PartitionRDD")
             .cache()
-          originRdd.count()
           originRdd.count()
           originRdd.mapPartitions{
             _ => TFNetNative.isLoaded
@@ -435,36 +449,47 @@ object PythonLoaderFeatureSet{
 
 class PythonLoaderFeatureSet[T: ClassTag](
     dataset: Array[Byte],
-    getIterator: (String, String) => String,
+    getIterator: (String, String, Int) => String,
     getNext: (String) => String,
     inputName: String,
     targetName: String = "",
-    batchSize: Int,
+    totalSize: Int,
     imports: String = "") extends DistributedFeatureSet[T] {
   import PythonLoaderFeatureSet._
   protected val namePostfix = Integer.toHexString(java.util.UUID.randomUUID().hashCode())
   protected val loaderName = s"loader${namePostfix}"
-  println(dataset.length)
 
-  val sharedInterp = getOrCreateInterpRdd()
-  loadPytorchLoader(loaderName, dataset, imports, batchSize, sharedInterp)
+  protected val sharedInterp = getOrCreateInterpRdd()
+  loadPytorchLoader(loaderName, dataset, imports, sharedInterp)
+
+  protected val batchSize = getBatchSize(sharedInterp, loaderName, inputName,
+    getIterator, getNext)
+  println(s"${loaderName}'s batchsize is ${batchSize}")
+  protected val stepPerPartition = math.ceil(totalSize.toFloat /
+    batchSize / EngineRef.getNodeNumber()).toInt
+  println(s"${loaderName}'s stepPerPartition is ${stepPerPartition}")
   override def originRDD(): RDD[_] = {
     sharedInterp
   }
 
   override def data(train: Boolean): RDD[T] = {
     val loaderName = this.loaderName
-    val iterName = s"${loaderName}_iter"
+    val iterName = s"${loaderName}_iter_${train}_"
     val inputName = this.inputName
     val targetName = this.targetName
     val getNext = this.getNext
     val getIterator = this.getIterator
+    val stepPerPartition = this.stepPerPartition
     if (train) {
       sharedInterp.mapPartitions{dataIter =>
         val interp = dataIter.next()
+        val ctx = TaskContext.get()
+        val partId = ctx.partitionId()
+        val localIterName = iterName + partId
+        println(s"skip ${partId * stepPerPartition}")
         new Iterator[T] {
-          val nextCode = getNext(iterName)
-          val getIteratorCode = getIterator(iterName, loaderName)
+          val nextCode = getNext(localIterName)
+          val getIteratorCode = getIterator(localIterName, loaderName, 0)
 
           override def hasNext: Boolean = {
             true
@@ -478,13 +503,14 @@ class PythonLoaderFeatureSet[T: ClassTag](
               case e: Exception =>
                 if(e.getMessage().contains("StopIteration")||
                   e.getMessage().contains("End of sequence")) {
+                  println(s"${loaderName} creating new generator")
                   interp.exec(getIteratorCode)
                   interp.exec(nextCode)
                 }
             }
             val inputs = toArrayTensor(interp.getValue(inputName))
             val miniBatch = if (targetName != "") {
-              val targets = toArrayTensor(interp.getValue(inputName))
+              val targets = toArrayTensor(interp.getValue(targetName))
               MiniBatch[Float](inputs, targets)
             } else {
               MiniBatch[Float](inputs)
@@ -496,19 +522,29 @@ class PythonLoaderFeatureSet[T: ClassTag](
       }
     } else {
       sharedInterp.mapPartitions{ dataIter =>
+        val ctx = TaskContext.get()
+        val partId = ctx.partitionId()
+        println(partId)
         val interp = dataIter.next()
-        interp.exec(getIterator(iterName, loaderName))
+        val localIterName = iterName + partId
+        interp.exec(getIterator(localIterName, loaderName, partId * stepPerPartition))
         new Iterator[T] {
-          val nextCode = getNext(iterName)
+          val nextCode = getNext(localIterName)
           var alreadyNext = false
+          var currentSteps = 0
 
           override def hasNext: Boolean = {
             try{
-              if (!alreadyNext) {
-                interp.exec(nextCode)
-                alreadyNext = true
+              if (currentSteps < stepPerPartition) {
+                if (!alreadyNext) {
+                  interp.exec(nextCode)
+                  alreadyNext = true
+                }
+                currentSteps += 1
+                true
+              } else {
+                false
               }
-              true
             }catch {
               case e: Exception =>
                 if(e.getMessage().contains("StopIteration") ||
@@ -527,7 +563,7 @@ class PythonLoaderFeatureSet[T: ClassTag](
             }
             val inputs = toArrayTensor(interp.getValue(inputName))
             val miniBatch = if (targetName != "") {
-              val targets = toArrayTensor(interp.getValue(inputName))
+              val targets = toArrayTensor(interp.getValue(targetName))
               MiniBatch[Float](inputs, targets)
             } else {
               MiniBatch[Float](inputs)
@@ -659,14 +695,14 @@ object FeatureSet {
   val logger: Logger = LoggerFactory.getLogger(this.getClass)
   private[zoo] def python[T: ClassTag](
       dataset: Array[Byte],
-      getIterator: (String, String) => String,
+      getIterator: (String, String, Int) => String,
       getNext: (String) => String,
       inputName: String,
       targetName: String,
-      batchSize: Int,
+      totalSize: Int,
       imports: String = ""): PythonLoaderFeatureSet[T] = {
     new PythonLoaderFeatureSet[T](dataset, getIterator, getNext,
-      inputName, targetName, batchSize, imports)
+      inputName, targetName, totalSize, imports)
   }
 
   def rdd[T: ClassTag](
