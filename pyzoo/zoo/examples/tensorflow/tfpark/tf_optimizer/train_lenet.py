@@ -37,7 +37,7 @@ def trainfunc():
         return tf.data.Dataset.from_generator(gen, (tf.float32, tf.int32), ((28, 28, 1), ()))
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data("/tmp/mnist")
     x_train.resize(60000, 28, 28, 1)
-    return create_mnist_dataset(x_train, y_train).batch(1111)
+    return create_mnist_dataset(x_train, y_train).batch(2048)
 
 
 def testfunc():
@@ -51,12 +51,23 @@ def testfunc():
         return tf.data.Dataset.from_generator(gen, (tf.float32, tf.int32), ((28, 28, 1), ()))
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data("/tmp/mnist")
     x_test.resize(10000, 28, 28, 1)
-    return create_mnist_dataset(x_test, y_test).batch(300)
+    return create_mnist_dataset(x_test, y_test).batch(3000)
 
 
 def main(max_epoch, data_num):
-    num_executors = 2
-    num_cores_per_executor = 1
+    sess = tf.Session()
+    t = trainfunc()
+    iter1 = t.skip(0).make_one_shot_iterator()
+    print(sess.run(iter1.get_next())[1])
+    td = testfunc()
+    iter2 = td.skip(1).make_one_shot_iterator()
+    print(sess.run(iter2.get_next())[1])
+    print(sess.run(iter2.get_next())[1])
+    print(sess.run(iter1.get_next())[1])
+
+
+    num_executors = 1
+    num_cores_per_executor = 4
     hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
     sc = init_spark_on_yarn(
         hadoop_conf=hadoop_conf_dir,
@@ -92,7 +103,7 @@ def main(max_epoch, data_num):
                                       val_labels=[labels],
                                       val_method=Top1Accuracy(), model_dir="/tmp/lenet/")
     # kick off training
-    optimizer.optimize(end_trigger=MaxEpoch(2))
+    optimizer.optimize(end_trigger=MaxEpoch(10))
 
     saver = tf.train.Saver()
     saver.save(optimizer.sess, "/tmp/lenet/model")

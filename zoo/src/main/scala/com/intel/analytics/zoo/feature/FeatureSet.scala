@@ -486,11 +486,23 @@ class PythonLoaderFeatureSet[T: ClassTag](
         val ctx = TaskContext.get()
         val partId = ctx.partitionId()
         val localIterName = iterName + partId
-        println(s"skip ${partId * stepPerPartition}")
-        new Iterator[T] {
-          val nextCode = getNext(localIterName)
-          val getIteratorCode = getIterator(localIterName, loaderName, 0)
+        println(s"train ${localIterName} skip ${partId * stepPerPartition}")
 
+        val getIteratorCode = getIterator(localIterName, loaderName,
+          partId * stepPerPartition)
+        interp.exec(getIteratorCode)
+        Iterator.single(1)
+      }.count()
+      sharedInterp.mapPartitions{dataIter =>
+        val interp = dataIter.next()
+        val ctx = TaskContext.get()
+        val partId = ctx.partitionId()
+        val localIterName = iterName + partId
+
+        val getIteratorCode = getIterator(localIterName, loaderName,
+          partId * stepPerPartition)
+        val nextCode = getNext(localIterName)
+        new Iterator[T] {
           override def hasNext: Boolean = {
             true
           }
@@ -503,12 +515,16 @@ class PythonLoaderFeatureSet[T: ClassTag](
               case e: Exception =>
                 if(e.getMessage().contains("StopIteration")||
                   e.getMessage().contains("End of sequence")) {
-                  println(s"${loaderName} creating new generator")
+                  println(s"${loaderName} end of sequence, creating new generator")
                   interp.exec(getIteratorCode)
                   interp.exec(nextCode)
+                } else {
+                  throw e
                 }
             }
+            println(s"${loaderName} interp run next cost ${(System.nanoTime() - stat) / 1e9} s")
             val inputs = toArrayTensor(interp.getValue(inputName))
+            print(inputs(1))
             val miniBatch = if (targetName != "") {
               val targets = toArrayTensor(interp.getValue(targetName))
               MiniBatch[Float](inputs, targets)
@@ -527,6 +543,7 @@ class PythonLoaderFeatureSet[T: ClassTag](
         println(partId)
         val interp = dataIter.next()
         val localIterName = iterName + partId
+        println(s"val ${localIterName}: skip ${partId * stepPerPartition}")
         interp.exec(getIterator(localIterName, loaderName, partId * stepPerPartition))
         new Iterator[T] {
           val nextCode = getNext(localIterName)
@@ -539,8 +556,8 @@ class PythonLoaderFeatureSet[T: ClassTag](
                 if (!alreadyNext) {
                   interp.exec(nextCode)
                   alreadyNext = true
+                  currentSteps += 1
                 }
-                currentSteps += 1
                 true
               } else {
                 false
@@ -560,8 +577,10 @@ class PythonLoaderFeatureSet[T: ClassTag](
             val stat = System.nanoTime()
             if (!alreadyNext) {
               interp.exec(nextCode)
+              currentSteps += 1
             }
             val inputs = toArrayTensor(interp.getValue(inputName))
+            print(inputs(1))
             val miniBatch = if (targetName != "") {
               val targets = toArrayTensor(interp.getValue(targetName))
               MiniBatch[Float](inputs, targets)
@@ -569,7 +588,8 @@ class PythonLoaderFeatureSet[T: ClassTag](
               MiniBatch[Float](inputs)
             }
             alreadyNext = false
-            println(s"${loaderName} next cost ${(System.nanoTime() - stat) / 1e9} s")
+            println(s"${loaderName} step(${currentSteps}) size${miniBatch.size()}" +
+              s" next cost ${(System.nanoTime() - stat) / 1e9} s")
             miniBatch.asInstanceOf[T]
           }
         }
