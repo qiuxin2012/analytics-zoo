@@ -76,9 +76,11 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
   }
 
   def createFeatureSetFromTfDataset(dataset: Array[Byte], totalSize: Int): FeatureSet[MiniBatch[Float]] = {
+    // set a random seed to make sure shuffle is the same in each executor
     val imports =
-      """
+      s"""
         |import tensorflow as tf
+        |tf.compat.v1.set_random_seed(${System.currentTimeMillis() % 1000})
         |from zoo.util.nest import flatten
         |sess = tf.Session()
         |""".stripMargin

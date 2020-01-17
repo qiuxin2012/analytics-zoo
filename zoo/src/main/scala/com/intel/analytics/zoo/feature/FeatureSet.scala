@@ -381,10 +381,10 @@ object PythonLoaderFeatureSet{
           // TODO: make sure 1 executor 1 partition
           val originRdd = sc.parallelize(
             Array.tabulate(nodeNumber)(_ => "dummy123123"), nodeNumber * 10)
-            .mapPartitions(_ => (0 until 10000000).toIterator)
+            .mapPartitions(_ => (0 until 20000000).toIterator)
             .coalesce(nodeNumber)
             .setName("PartitionRDD")
-            .cache()
+            .persist(StorageLevel.DISK_ONLY)
           originRdd.count()
           originRdd.mapPartitions{
             _ => TFNetNative.isLoaded

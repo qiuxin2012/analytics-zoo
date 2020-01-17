@@ -19,6 +19,7 @@ from zoo.tfpark import TFOptimizer, TFDataset
 from bigdl.optim.optimizer import *
 import numpy as np
 import sys
+from bigdl.dataset import mnist
 
 sys.path.append("/tmp/models/research/slim")  # add the slim library
 from nets import lenet
@@ -26,55 +27,43 @@ from nets import lenet
 slim = tf.contrib.slim
 
 
+def _normalize_train_img(img, label):
+  img = (tf.cast(img, tf.float32) - mnist.TRAIN_MEAN) / mnist.TRAIN_STD
+  return (img, label)
+
+
+def _normalize_test_img(img, label):
+  img = (tf.cast(img, tf.float32) - mnist.TEST_MEAN) / mnist.TEST_STD
+  return (img, label)
+
+
+
 def trainfunc():
-    import numpy as np
-    import tensorflow as tf
-    def create_mnist_dataset(data, labels):
-        def gen():
-            for image, label in zip(data, labels):
-                np.resize(image, (28, 28, 1))
-                yield image, label
-        return tf.data.Dataset.from_generator(gen, (tf.float32, tf.int32), ((28, 28, 1), ()))
-    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data("/tmp/mnist")
-    x_train.resize(60000, 28, 28, 1)
-    return create_mnist_dataset(x_train, y_train).batch(2048)
+    import tensorflow_datasets as tfds
+    t = tfds.load(data_dir="/tmp/tfds/mnist", name="mnist", split=tfds.Split.TRAIN, as_supervised=True)
+    return t.map(_normalize_train_img).shuffle(1024) \
+        .batch(256).prefetch(tf.data.experimental.AUTOTUNE)
 
 
 def testfunc():
-    import numpy as np
-    import tensorflow as tf
-    def create_mnist_dataset(data, labels):
-        def gen():
-            for image, label in zip(data, labels):
-                np.resize(image, (28, 28, 1))
-                yield image, label
-        return tf.data.Dataset.from_generator(gen, (tf.float32, tf.int32), ((28, 28, 1), ()))
-    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data("/tmp/mnist")
-    x_test.resize(10000, 28, 28, 1)
-    return create_mnist_dataset(x_test, y_test).batch(3000)
+    import tensorflow_datasets as tfds
+    t = tfds.load(data_dir="/tmp/tfds/mnist", name="mnist", split=tfds.Split.TEST, as_supervised=True)
+    return t.map(_normalize_test_img) \
+        .batch(128).prefetch(tf.data.experimental.AUTOTUNE)
 
 
 def main(max_epoch, data_num):
-    sess = tf.Session()
-    t = trainfunc()
-    iter1 = t.skip(0).make_one_shot_iterator()
-    print(sess.run(iter1.get_next())[1])
-    td = testfunc()
-    iter2 = td.skip(1).make_one_shot_iterator()
-    print(sess.run(iter2.get_next())[1])
-    print(sess.run(iter2.get_next())[1])
-    print(sess.run(iter1.get_next())[1])
+    trainfunc()
 
-
-    num_executors = 1
-    num_cores_per_executor = 4
+    num_executors = 4
+    num_cores_per_executor = 1
     hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
     sc = init_spark_on_yarn(
         hadoop_conf=hadoop_conf_dir,
         conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
         num_executor=num_executors,
         executor_cores=num_cores_per_executor,
-        executor_memory="2g",
+        executor_memory="3g",
         driver_memory="10g",
         driver_cores=1,
         spark_conf={"spark.rpc.message.maxSize": "1024",
@@ -103,7 +92,7 @@ def main(max_epoch, data_num):
                                       val_labels=[labels],
                                       val_method=Top1Accuracy(), model_dir="/tmp/lenet/")
     # kick off training
-    optimizer.optimize(end_trigger=MaxEpoch(10))
+    optimizer.optimize(end_trigger=MaxEpoch(max_epoch))
 
     saver = tf.train.Saver()
     saver.save(optimizer.sess, "/tmp/lenet/model")
