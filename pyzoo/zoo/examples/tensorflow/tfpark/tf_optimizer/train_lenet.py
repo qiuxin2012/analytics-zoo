@@ -42,7 +42,7 @@ def trainfunc():
     import tensorflow_datasets as tfds
     t = tfds.load(data_dir="/tmp/tfds/mnist", name="mnist", split=tfds.Split.TRAIN, as_supervised=True)
     return t.map(_normalize_train_img).shuffle(1024) \
-        .batch(256).prefetch(tf.data.experimental.AUTOTUNE)
+        .batch(512).prefetch(tf.data.experimental.AUTOTUNE)
 
 
 def testfunc():
@@ -55,7 +55,7 @@ def testfunc():
 def main(max_epoch, data_num):
     trainfunc()
 
-    num_executors = 4
+    num_executors = 2
     num_cores_per_executor = 1
     hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
     sc = init_spark_on_yarn(

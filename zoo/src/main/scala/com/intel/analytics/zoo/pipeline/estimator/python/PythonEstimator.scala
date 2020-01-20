@@ -21,8 +21,10 @@ import java.util.{List => JList, Map => JMap}
 import com.intel.analytics.bigdl.{Criterion, Module}
 import com.intel.analytics.bigdl.dataset.{MiniBatch, Sample, SampleToMiniBatch}
 import com.intel.analytics.bigdl.optim.{OptimMethod, Trigger, ValidationMethod, ValidationResult}
+import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.transform.vision.image.{ImageFeature, ImageFeatureToMiniBatch}
+import com.intel.analytics.bigdl.utils.Table
 import com.intel.analytics.zoo.common.PythonZoo
 import com.intel.analytics.zoo.feature.FeatureSet
 import com.intel.analytics.zoo.pipeline.estimator.Estimator
@@ -101,6 +103,17 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
       checkPointTrigger: Trigger = null,
       validationSet: FeatureSet[MiniBatch[T]] = null,
       validationMethod: JList[ValidationMethod[T]] = null) : estimator.type = {
+//    val ta = trainSet.toDistributed().data(train = false).map{r =>
+//      r.getInput().asInstanceOf[Table].apply[Tensor[Float]](2).toArray()
+//    }.collect()
+//    val tb = ta.flatMap(v => v).groupBy(v => v).map(v => (v._1, v._2.size)).toArray.sorted
+//    println(tb.mkString("\t"))
+//
+//    val va = validationSet.toDistributed().data(train = false).map{r =>
+//      r.getInput().asInstanceOf[Table].apply[Tensor[Float]](2).toArray()
+//    }.collect()
+//    val vb = va.flatMap(v => v).groupBy(v => v).map(v => (v._1, v._2.size)).toArray.sorted
+//    println(vb.mkString("\t"))
     estimator.train(trainSet, criterion,
       Option(endTrigger), Option(checkPointTrigger),
       validationSet, Option(validationMethod).map(_.asScala.toArray).orNull)
