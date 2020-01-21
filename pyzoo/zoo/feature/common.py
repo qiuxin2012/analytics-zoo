@@ -350,14 +350,15 @@ class FeatureSet(DataSet):
         return cls(jvalue=jvalue)
 
     @classmethod
-    def tf_dataset(cls, dataset, batch_size, bigdl_type="float"):
+    def tf_dataset(cls, func, total_size, bigdl_type="float"):
         """
-        :param dataset: a pytorch data loader
+        :param func: a function return a tensorflow dataset
+        :param total_size: total size of this dataset
         :param bigdl_type: numeric type
         :return: A feature set
         """
-        dataset = CloudPickleSerializer.dumps(CloudPickleSerializer, dataset)
-        jvalue = callZooFunc(bigdl_type, "createFeatureSetFromTfDataset", dataset, batch_size)
+        func = CloudPickleSerializer.dumps(CloudPickleSerializer, func)
+        jvalue = callZooFunc(bigdl_type, "createFeatureSetFromTfDataset", func, total_size)
         return cls(jvalue=jvalue)
 
     def transform(self, transformer):
