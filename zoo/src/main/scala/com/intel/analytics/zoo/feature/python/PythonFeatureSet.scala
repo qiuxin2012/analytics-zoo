@@ -80,7 +80,9 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
     featureSet.toDataSet()
   }
 
-  def createFeatureSetFromTfDataset(dataset: Array[Byte], totalSize: Int): FeatureSet[MiniBatch[Float]] = {
+  def createFeatureSetFromTfDataset(
+        dataset: Array[Byte],
+        totalSize: Int): FeatureSet[MiniBatch[Float]] = {
     val nodeNumber = EngineRef.getNodeNumber()
     // set a random seed to make sure shuffle is the same in each executor
     val imports =

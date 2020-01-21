@@ -374,7 +374,6 @@ object PythonLoaderFeatureSet{
     if (jepRDD == null) {
       this.synchronized {
         if (jepRDD == null) {
-          println("creating interp RDD")
           val sc = SparkContext.getOrCreate()
           val nodeNumber = EngineRef.getNodeNumber()
           // TODO: make sure 1 executor 1 partition
@@ -443,7 +442,7 @@ object PythonLoaderFeatureSet{
   protected def ndArrayToTensor(ndArray: NDArray[_]): Tensor[Float] = {
     val array = ndArray.asInstanceOf[NDArray[Array[_]]]
     val data = array.getData()
-    data(0) match{
+    data(0) match {
       case _: Float =>
         Tensor[Float](data.asInstanceOf[Array[Float]], array.getDimensions)
       case _ =>
@@ -491,14 +490,12 @@ class PythonLoaderFeatureSet[T: ClassTag](
           }
 
           override def next(): T = {
-            val stat = System.nanoTime()
             try {
               interp.exec(nextCode)
             } catch {
               case e: Exception =>
-                if(e.getMessage().contains("End of sequence") ||
+                if (e.getMessage().contains("End of sequence") ||
                   e.getMessage().contains("is not defined")) {
-                  println(s"${localIterName} end of sequence, creating new generator")
                   interp.exec(getIteratorCode)
                   interp.exec(nextCode)
                 } else {
@@ -528,11 +525,11 @@ class PythonLoaderFeatureSet[T: ClassTag](
 
           override def hasNext: Boolean = {
               if (!alreadyNext) {
-                try{
+                try {
                   interp.exec(nextCode)
-                }catch {
+                } catch {
                   case e: Exception =>
-                    if(e.getMessage().contains("End of sequence")) {
+                    if (e.getMessage().contains("End of sequence")) {
                       return false
                     } else {
                       throw e
