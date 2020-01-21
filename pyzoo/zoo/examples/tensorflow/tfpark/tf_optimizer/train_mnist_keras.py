@@ -15,41 +15,39 @@
 #
 
 import tensorflow as tf
-from zoo import init_spark_on_yarn
+from zoo import init_nncontext
 from zoo.tfpark import TFOptimizer, TFDataset
 from bigdl.optim.optimizer import *
 import sys
 from tensorflow.keras.models import Model
+from tensorflow.keras.layers import *
+
+from bigdl.dataset import mnist
+from bigdl.dataset.transformer import *
 
 
 def main(max_epoch, data_num):
-    num_executors = 1
-    num_cores_per_executor = 1
-    hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
-    sc = init_spark_on_yarn(
-        hadoop_conf=hadoop_conf_dir,
-        conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
-        num_executor=num_executors,
-        executor_cores=num_cores_per_executor,
-        executor_memory="2g",
-        driver_memory="10g",
-        driver_cores=1,
-        spark_conf={"spark.rpc.message.maxSize": "1024",
-                    "spark.task.maxFailures":  "1",
-                    "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
+    sc = init_nncontext()
 
+    # get data, pre-process and create TFDataset
+    def get_data_rdd(dataset):
+        (images_data, labels_data) = mnist.read_data_sets("/tmp/mnist", dataset)
+        image_rdd = sc.parallelize(images_data[:data_num])
+        labels_rdd = sc.parallelize(labels_data[:data_num])
+        rdd = image_rdd.zip(labels_rdd) \
+            .map(lambda rec_tuple: [normalizer(rec_tuple[0], mnist.TRAIN_MEAN, mnist.TRAIN_STD),
+                                    np.array(rec_tuple[1])])
+        return rdd
 
-    # dataset = TFDataset.from_dataset(train_dataset, 20, validation_set=valid_dataset)
-
-    from zoo.examples.tensorflow.tfpark.tf_optimizer.train_lenet import trainfunc, testfunc
-    dataset = TFDataset.from_dataset(trainfunc,
+    training_rdd = get_data_rdd("train")
+    testing_rdd = get_data_rdd("test")
+    dataset = TFDataset.from_rdd(training_rdd,
                                  features=(tf.float32, [28, 28, 1]),
                                  labels=(tf.int32, []),
                                  batch_size=280,
-                                 val_dataset=testfunc
+                                 val_rdd=testing_rdd
                                  )
 
-    from tensorflow.keras.layers import Input, Flatten, Dense
     data = Input(shape=[28, 28, 1])
 
     x = Flatten()(data)
@@ -70,8 +68,8 @@ def main(max_epoch, data_num):
 
     model.save_weights("/tmp/mnist_keras/mnist_keras.h5")
 
-
 if __name__ == '__main__':
+
     max_epoch = 5
     data_num = 60000
 

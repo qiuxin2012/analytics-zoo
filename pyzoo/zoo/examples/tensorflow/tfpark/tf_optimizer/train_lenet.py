@@ -14,69 +14,41 @@
 # limitations under the License.
 #
 import tensorflow as tf
-from zoo import init_nncontext, init_spark_on_yarn
+from zoo import init_nncontext
 from zoo.tfpark import TFOptimizer, TFDataset
 from bigdl.optim.optimizer import *
 import numpy as np
 import sys
-from bigdl.dataset import mnist
 
-sys.path.append("/tmp/models/research/slim")  # add the slim library
+from bigdl.dataset import mnist
+from bigdl.dataset.transformer import *
+
+sys.path.append("/tmp/models/slim")  # add the slim library
 from nets import lenet
 
 slim = tf.contrib.slim
 
 
-def _normalize_train_img(img, label):
-  img = (tf.cast(img, tf.float32) - mnist.TRAIN_MEAN) / mnist.TRAIN_STD
-  return (img, label)
-
-
-def _normalize_test_img(img, label):
-  img = (tf.cast(img, tf.float32) - mnist.TEST_MEAN) / mnist.TEST_STD
-  return (img, label)
-
-
-
-def trainfunc():
-    import tensorflow_datasets as tfds
-    t = tfds.load(data_dir="/tmp/tfds/mnist", name="mnist", split=tfds.Split.TRAIN, as_supervised=True)
-    return t.map(_normalize_train_img).shuffle(1024) \
-        .batch(512).prefetch(tf.data.experimental.AUTOTUNE)
-
-
-def testfunc():
-    import tensorflow_datasets as tfds
-    t = tfds.load(data_dir="/tmp/tfds/mnist", name="mnist", split=tfds.Split.TEST, as_supervised=True)
-    return t.map(_normalize_test_img) \
-        .batch(128).prefetch(tf.data.experimental.AUTOTUNE)
-
-
 def main(max_epoch, data_num):
-    trainfunc()
+    sc = init_nncontext()
 
-    num_executors = 2
-    num_cores_per_executor = 1
-    hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
-    sc = init_spark_on_yarn(
-        hadoop_conf=hadoop_conf_dir,
-        conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
-        num_executor=num_executors,
-        executor_cores=num_cores_per_executor,
-        executor_memory="3g",
-        driver_memory="10g",
-        driver_cores=1,
-        spark_conf={"spark.rpc.message.maxSize": "1024",
-                    "spark.task.maxFailures":  "1",
-                    "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
+    # get data, pre-process and create TFDataset
+    def get_data_rdd(dataset):
+        (images_data, labels_data) = mnist.read_data_sets("/tmp/mnist", dataset)
+        image_rdd = sc.parallelize(images_data[:data_num])
+        labels_rdd = sc.parallelize(labels_data[:data_num])
+        rdd = image_rdd.zip(labels_rdd) \
+            .map(lambda rec_tuple: [normalizer(rec_tuple[0], mnist.TRAIN_MEAN, mnist.TRAIN_STD),
+                                    np.array(rec_tuple[1])])
+        return rdd
 
-    dataset = TFDataset.from_dataset(trainfunc,
-                                     train_dataset_size=60000,
-                                     features=(tf.float32, [28, 28, 1]),
-                                     labels=(tf.int32, []),
-                                     val_dataset=testfunc,
-                                     val_dataset_size=10000
-                                     )
+    training_rdd = get_data_rdd("train")
+    testing_rdd = get_data_rdd("test")
+    dataset = TFDataset.from_rdd(training_rdd,
+                                 features=(tf.float32, [28, 28, 1]),
+                                 labels=(tf.int32, []),
+                                 batch_size=280,
+                                 val_rdd=testing_rdd)
 
     # construct the model from TFDataset
     images, labels = dataset.tensors
