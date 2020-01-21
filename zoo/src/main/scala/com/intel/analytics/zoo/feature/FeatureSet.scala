@@ -338,22 +338,6 @@ object PythonLoaderFeatureSet{
     s"${loaderName}_iter_${train}"
   }
 
-//  protected def getBatchSize(interpRdd: RDD[SharedInterpreter],
-//                             loaderName: String,
-//                             inputName: String,
-//                             getIterator: (String, String, Int) => String,
-//                             getNext: (String) => String): Int = {
-//    val iterName = "findBatchSize" + System.nanoTime()
-//    interpRdd.mapPartitions{dataIter =>
-//      val interp = dataIter.next()
-//      interp.exec(getIterator(iterName, getLocalLoader(loaderName)))
-//      interp.exec(getNext(iterName))
-//      val inputs = toArrayTensor(interp.getValue(inputName))
-//      val miniBatch = MiniBatch[Float](inputs)
-//      Iterator.single(miniBatch)
-//    }.first().size()
-//  }
-
   protected def loadPytorchLoader(
       loaderName: String,
       dataset: Array[Byte],
@@ -483,13 +467,6 @@ class PythonLoaderFeatureSet[T: ClassTag](
   protected val sharedInterp = getOrCreateInterpRdd()
   loadPytorchLoader(loaderName, dataset, imports, sharedInterp)
 
-//  protected val batchSize = 500
-    //getBatchSize(sharedInterp, loaderName, inputName,
-//    getIterator, getNext)
-//  println(s"${loaderName}'s batchsize is ${batchSize}")
-//  protected val stepPerPartition = math.ceil(totalSize.toFloat /
-//    batchSize / EngineRef.getNodeNumber()).toInt
-//  println(s"${loaderName}'s stepPerPartition is ${stepPerPartition}")
   override def originRDD(): RDD[_] = {
     sharedInterp
   }
@@ -500,15 +477,7 @@ class PythonLoaderFeatureSet[T: ClassTag](
     val targetName = this.targetName
     val getNext = this.getNext
     val getIterator = this.getIterator
-//    val stepPerPartition = this.stepPerPartition
     if (train) {
-//      sharedInterp.mapPartitions{dataIter =>
-//        val interp = dataIter.next()
-//        val localIterName = getLocalIter(getLocalLoader(loaderName), train)
-//        val getIteratorCode = getIterator(localIterName, loaderName, 0)
-//        interp.exec(getIteratorCode)
-//        Iterator.single(1)
-//      }.count()
       sharedInterp.mapPartitions{dataIter =>
         val interp = dataIter.next()
         val localLoaderName = getLocalLoader(loaderName)
@@ -527,8 +496,7 @@ class PythonLoaderFeatureSet[T: ClassTag](
               interp.exec(nextCode)
             } catch {
               case e: Exception =>
-                if(e.getMessage().contains("StopIteration")||
-                  e.getMessage().contains("End of sequence") ||
+                if(e.getMessage().contains("End of sequence") ||
                   e.getMessage().contains("is not defined")) {
                   println(s"${localIterName} end of sequence, creating new generator")
                   interp.exec(getIteratorCode)
@@ -537,16 +505,13 @@ class PythonLoaderFeatureSet[T: ClassTag](
                   throw e
                 }
             }
-            println(s"${localIterName} interp run next cost ${(System.nanoTime() - stat) / 1e9} s")
             val inputs = toArrayTensor(interp.getValue(inputName))
-            print(inputs(1))
             val miniBatch = if (targetName != "") {
               val targets = toArrayTensor(interp.getValue(targetName))
               MiniBatch[Float](inputs, targets)
             } else {
               MiniBatch[Float](inputs)
             }
-            println(s"${localIterName} next cost ${(System.nanoTime() - stat) / 1e9} s")
             miniBatch.asInstanceOf[T]
           }
         }
@@ -560,40 +525,29 @@ class PythonLoaderFeatureSet[T: ClassTag](
         new Iterator[T] {
           val nextCode = getNext(localIterName)
           var alreadyNext = false
-//          var currentSteps = 0
 
           override def hasNext: Boolean = {
-//            if (currentSteps < stepPerPartition) {
               if (!alreadyNext) {
                 try{
                   interp.exec(nextCode)
                 }catch {
                   case e: Exception =>
-                    if(e.getMessage().contains("StopIteration") ||
-                      e.getMessage().contains("End of sequence")) {
+                    if(e.getMessage().contains("End of sequence")) {
                       return false
                     } else {
                       throw e
                     }
                 }
                 alreadyNext = true
-//                currentSteps += 1
               }
               true
-//            }
-//          else {
-//              false
-//            }
           }
 
           override def next(): T = {
-            val stat = System.nanoTime()
             if (!alreadyNext) {
               interp.exec(nextCode)
-//              currentSteps += 1
             }
             val inputs = toArrayTensor(interp.getValue(inputName))
-            print(inputs(1))
             val miniBatch = if (targetName != "") {
               val targets = toArrayTensor(interp.getValue(targetName))
               MiniBatch[Float](inputs, targets)
@@ -601,8 +555,6 @@ class PythonLoaderFeatureSet[T: ClassTag](
               MiniBatch[Float](inputs)
             }
             alreadyNext = false
-            println(s"${localIterName} size${miniBatch.size()}" +
-              s" next cost ${(System.nanoTime() - stat) / 1e9} s")
             miniBatch.asInstanceOf[T]
           }
         }

@@ -90,10 +90,9 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
         |sess = tf.Session()
         |""".stripMargin
     def getIterator(iterName: String, loaderName: String): String = {
-      val iter = s"""
+      s"""
          |${iterName} = ${loaderName}.make_one_shot_iterator()
          |""".stripMargin
-      iter
     }
     def getNext(iterName: String): String = {
       s"""
