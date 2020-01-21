@@ -299,10 +299,6 @@ class TFDataset(object):
         return MapDataset(self, map_fn)
 
     @staticmethod
-    def from_dataset(*args, **kwargs):
-        return TFFeatureSetDataset.from_dataset(*args, **kwargs)
-
-    @staticmethod
     def from_rdd(*args, **kwargs):
         """
         Create a TFDataset from a rdd.
@@ -660,73 +656,6 @@ class TFFeatureDataset(TFDataset):
 
     def get_num_partitions(self):
         raise NotImplementedError()
-
-
-class TFFeatureSetDataset(TFDataset):
-
-    def __init__(self, dataset, train_dataset_size, tensor_structure,
-                 batch_size=100, batch_per_thread=-1,
-                 val_dataset=None, val_dataset_size=-2):
-        super(TFFeatureSetDataset, self).__init__(tensor_structure, batch_size,
-                                                  batch_per_thread)
-        # TODO: throw exception if dataset is repeated
-        self.dataset = FeatureSet.tf_dataset(dataset, train_dataset_size)
-        if val_dataset is not None:
-            self.val_dataset = FeatureSet.tf_dataset(val_dataset, val_dataset_size)
-
-    def get_prediction_data(self):
-        raise Exception("TFFeatureSetDataset is only supported in training")
-
-    def get_evaluation_data(self):
-        raise Exception("TFFeatureSetDataset is only supported in training")
-
-    def get_training_data(self):
-        return self.dataset
-
-    def get_validation_data(self):
-        if self.val_dataset is not None:
-            return self.val_dataset
-        return None
-
-    def get_num_partitions(self):
-        raise NotImplementedError()
-
-    @staticmethod
-    def from_dataset(train_dataset, train_dataset_size=-2, names=None,
-                     shapes=None, types=None,
-                     val_dataset=None, val_dataset_size=-2,
-                     features=None, labels=None,
-                     shuffle=True):
-        import tensorflow as tf
-
-        if features is not None:
-            feature_structure = _to_tensor_structure(features)
-            if labels is not None:
-                label_structure = _to_tensor_structure(labels)
-                tensor_structure = (feature_structure, label_structure)
-
-            else:
-                tensor_structure = (feature_structure,)
-
-            return TFFeatureSetDataset(train_dataset, train_dataset_size, tensor_structure,
-                                       val_dataset=val_dataset, val_dataset_size=val_dataset_size)
-
-        if names is not None or shapes is not None or types is not None:
-            if not names:
-                names = ["features", "labels"]
-            if not shapes:
-                shapes = [None] * len(names)
-
-            if not types:
-                types = [tf.float32] * len(names)
-            tensor_structure = []
-            for i in range(len(names)):
-                tensor_structure.append(TensorMeta(types[i], name=names[i], shape=shapes[i]))
-        else:
-            tensor_structure = [TensorMeta(dtype=tf.float32), TensorMeta(dtype=tf.float32)]
-
-        return TFFeatureSetDataset(train_dataset, train_dataset_size, tensor_structure,
-                                   val_dataset=val_dataset, val_dataset_size=val_dataset_size)
 
 
 class TFBytesDataset(TFDataset):
