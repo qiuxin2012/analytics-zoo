@@ -90,7 +90,6 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, parameterLen
     output = PythonLoaderFeatureSet.ndArrayToTensor(outputNd)
     output
   }
-
   override def updateGradInput(input: Activity, gradOutput: Activity): Activity = {
     loaded
     val backwardCode =
@@ -103,9 +102,10 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, parameterLen
         |""".stripMargin
     sharedJep.exec(backwardCode)
     // TODO: just do a copy
+    val gradSum = sharedJep.getValue("grad.data.numpy().sum()").asInstanceOf[Float]
     val grad = PythonLoaderFeatureSet.ndArrayToTensor(
       sharedJep.getValue("grad.data.numpy()").asInstanceOf[NDArray[_]])
-    println("gradients sum" + grad.sum())
+    println("gradients sum: " + grad.sum() + ", while python side: " + gradSum)
     gradients.copy(grad)
 
     gradInput
