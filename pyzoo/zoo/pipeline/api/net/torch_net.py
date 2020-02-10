@@ -39,6 +39,7 @@ class TorchNet2(Layer):
     """
 
     def __init__(self, module_bytes, weights, bigdl_type="float"):
+        weights = [float(v) for v in weights]
         super(TorchNet2, self).__init__(None, bigdl_type, module_bytes, weights)
 
     @staticmethod
@@ -46,7 +47,7 @@ class TorchNet2(Layer):
         weights=[]
         for param in model.parameters():
             weights.append(param.view(-1))
-        flatten_weight=torch.nn.utils.parameters_to_vector(weights).data.numpy()
+        flatten_weight = torch.nn.utils.parameters_to_vector(weights).data.numpy()
         from pyspark.serializers import CloudPickleSerializer
         bys = CloudPickleSerializer.dumps(CloudPickleSerializer, model)
         net = TorchNet2(bys, list(flatten_weight))
