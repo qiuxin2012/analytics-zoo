@@ -38,14 +38,16 @@ class TorchNet2(Layer):
     :param path: path to the TorchScript model.
     """
 
-    def __init__(self, module_bytes, bigdl_type="float"):
-        super(TorchNet, self).__init__(None, bigdl_type, module_bytes)
+    def __init__(self, module_bytes, param_len, bigdl_type="float"):
+        super(TorchNet2, self).__init__(None, bigdl_type, module_bytes, param_len)
 
     @staticmethod
-    def from_pytorch(module):
-        import pickle
-        bys = pickle.dumps(module)
-        net = TorchNet2(bys)
+    def from_pytorch(model):
+        model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+        params = sum([np.prod(p.size()) for p in model_parameters])
+        from pyspark.serializers import CloudPickleSerializer
+        bys = CloudPickleSerializer.dumps(CloudPickleSerializer, model)
+        net = TorchNet2(bys, params.item())
 
         return net
 

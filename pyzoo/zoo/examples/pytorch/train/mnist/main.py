@@ -5,8 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
-from zoo.pipeline.api.net.torch_net import TorchNet
-from zoo.pipeline.api.net.torch_criterion import TorchCriterion
+from zoo.pipeline.api.net.torch_net import TorchNet2
+from zoo.pipeline.api.net.torch_criterion import TorchCriterion2
 from zoo.pipeline.estimator import *
 from bigdl.optim.optimizer import SGD, Adam
 from zoo.common.nncontext import *
@@ -25,7 +25,6 @@ class Net(nn.Module):
         self.conv2 = nn.Conv2d(20, 50, 5, 1)
         self.fc1 = nn.Linear(4*4*50, 500)
         self.fc2 = nn.Linear(500, 10)
-
     def forward(self, x):
         x = F.relu(self.conv1(x))
         x = F.max_pool2d(x, 2, 2)
@@ -39,7 +38,7 @@ class Net(nn.Module):
 def main():
     # Training settings
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
-    parser.add_argument('--batch-size', type=int, default=64, metavar='N',
+    parser.add_argument('--batch-size', type=int, default=256, metavar='N',
                         help='input batch size for training (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                         help='input batch size for testing (default: 1000)')
@@ -96,14 +95,10 @@ def main():
                        ])),
         batch_size=args.test_batch_size, shuffle=True)
 
-
-    model = Net().to(device)
-    # optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
-
     num_executors = 1
     num_cores_per_executor = 1
     hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
-    sc = init_spark_on_yarn(
+    init_spark_on_yarn(
         hadoop_conf=hadoop_conf_dir,
         conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
         num_executor=num_executors,
@@ -114,15 +109,20 @@ def main():
         spark_conf={"spark.rpc.message.maxSize": "1024",
                     "spark.task.maxFailures":  "1",
                     "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
+
+    model = Net()
+    # optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
+
     model.train()
-    adam = Adam()
-    zooModel = TorchNet.from_pytorch(model, [64, 1, 28, 28])
+    adam = SGD()
+    zooModel = TorchNet2.from_pytorch(model)
+    zooCriterion = TorchCriterion2()
     # from bigdl.models.lenet.lenet5 import build_model
     # zooModel = build_model(10)
-    def lossFunc(input, target):
-        return nn.NLLLoss().forward(input, target.flatten().long())
-
-    zooCriterion = TorchCriterion.from_pytorch(lossFunc, [1, 2], torch.LongTensor([1]))
+    # def lossFunc(input, target):
+    #     return nn.NLLLoss().forward(input, target.flatten().long())
+    #
+    # zooCriterion = TorchCriterion.from_pytorch(lossFunc, [1, 2], torch.LongTensor([1]))
     # zooCriterion = SparseCategoricalCrossEntropy(zero_based_label=True)
     # from bigdl.nn.criterion import ClassNLLCriterion
     # zooCriterion = ClassNLLCriterion()
@@ -134,7 +134,7 @@ def main():
     # print(test_featureSet.to_dataset().size())
     # estimator.evaluate_minibatch(train_featureSet, [Accuracy()])
     from bigdl.optim.optimizer import MaxEpoch, EveryEpoch
-    estimator.train_minibatch(train_featureSet, zooCriterion, end_trigger=MaxEpoch(10), checkpoint_trigger=EveryEpoch(),
+    estimator.train_minibatch(train_featureSet, zooCriterion, end_trigger=MaxEpoch(1), checkpoint_trigger=EveryEpoch(),
                               validation_set=test_featureSet, validation_method=[Accuracy()])
 
 if __name__ == '__main__':

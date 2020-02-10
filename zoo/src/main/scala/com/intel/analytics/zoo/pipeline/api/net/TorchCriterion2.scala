@@ -24,7 +24,7 @@ class TorchCriterion2 extends AbstractCriterion[Activity, Activity, Float]() {
   import TorchCriterion2._
 
   override def updateOutput(input: Activity, target: Activity): Float = {
-    output = sharedJep.getValue("loss.item()").asInstanceOf[Float]
+    output = sharedJep.getValue("loss.item()").asInstanceOf[Double].toFloat
     output
   }
 
@@ -36,7 +36,11 @@ class TorchCriterion2 extends AbstractCriterion[Activity, Activity, Float]() {
 }
 
 object TorchCriterion2{
-  protected val sharedJep = PythonLoaderFeatureSet.getOrCreateInterpreter()
+  private[zoo] lazy val sharedJep = PythonLoaderFeatureSet.getOrCreateInterpreter()
+
+  def apply(): TorchCriterion2 = {
+    new TorchCriterion2()
+  }
 }
 
 

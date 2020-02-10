@@ -331,6 +331,8 @@ object PythonLoaderFeatureSet{
   val imports = s"""
                    |import pickle
                    |import numpy as np
+                   |from pyspark.serializers import CloudPickleSerializer
+                   |ser = CloudPickleSerializer()
                    |
                    |def tensor_to_numpy(elements):
                    |    if isinstance(elements, np.ndarray):
@@ -407,6 +409,9 @@ object PythonLoaderFeatureSet{
     if (sharedInterpreter == null) {
       this.synchronized {
         if (sharedInterpreter == null) {
+          val config: JepConfig = new JepConfig()
+          config.setClassEnquirer(new NamingConventionClassEnquirer())
+          SharedInterpreter.setConfig(config)
           sharedInterpreter = new SharedInterpreter()
           sharedInterpreter.exec(imports)
         }
@@ -519,7 +524,7 @@ class PythonLoaderFeatureSet[T: ClassTag](
           var i = 0
           val nextCode =
             s"""
-               |batch_idx, (data, target) = next($iterName)
+               |batch_idx, data = next($iterName)
                |""".stripMargin
 
           override def hasNext: Boolean = {
@@ -530,8 +535,8 @@ class PythonLoaderFeatureSet[T: ClassTag](
             val stat = System.nanoTime()
             i += 1
             interp.exec(nextCode)
-            val input = interp.getValue("data.numpy()").asInstanceOf[NDArray[Array[Float]]]
-            val target = interp.getValue("target.numpy()").asInstanceOf[NDArray[Array[Long]]]
+            val input = interp.getValue("data[0].numpy()").asInstanceOf[NDArray[Array[Float]]]
+            val target = interp.getValue("data[1].numpy()").asInstanceOf[NDArray[Array[Long]]]
             val r = MiniBatch[Float](Tensor[Float](input.getData, input.getDimensions),
               Tensor[Float](target.getData().map(_.toFloat), target.getDimensions)
             ).asInstanceOf[T]

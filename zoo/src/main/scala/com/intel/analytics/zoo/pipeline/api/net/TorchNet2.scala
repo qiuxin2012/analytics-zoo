@@ -37,15 +37,22 @@ import scala.reflect.ClassTag
 class TorchNet2 private(private val modelHolder: TorchModelHolder2, parameterLength: Int)
   extends AbstractModule[Activity, Activity, Float]{
   import TorchNet2._
-  sharedJep.set("model_bytes", modelHolder.torchBytes)
-  val loadModelCode =
-    s"""
-      |by = bytes(b % 256 for b in pyjarray)
-      |${getName()} = pickle.loads(by)
-      |""".stripMargin
-  sharedJep.exec(loadModelCode)
 
-  val weights: Tensor[Float] = Tensor(parameterLength)
+  protected lazy val loaded = {
+    sharedJep.set("model_bytes", modelHolder.torchBytes)
+    val loadModelCode =
+      s"""
+         |import torch
+         |import torch.nn as nn
+         |import torch.nn.functional as F
+         |by = bytes(b % 256 for b in model_bytes)
+         |${getName()} = ser.loads(by)
+         |""".stripMargin
+    sharedJep.exec(loadModelCode)
+    true
+  }
+
+  val weights: Tensor[Float] = Tensor[Float](parameterLength).rand(-0.001, 0.001)
   val gradients: Tensor[Float] = Tensor(parameterLength)
 
   override def parameters(): (Array[Tensor[Float]], Array[Tensor[Float]]) = {
@@ -63,35 +70,42 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, parameterLen
     s"""
        |input = data[0]
        |target = data[1]
-       |output = ${getName()}(data)
+       |output = ${getName()}(input)
        |""".stripMargin
 
   override def updateOutput(input: Activity): Activity = {
     // TODO: parameter from python
+    loaded
     sharedJep.set("newWeight", weights.storage().array())
     val forwardCode = if (train) {
+      println("weights sum" + weights.sum())
       setWeightCode +
-        "\nloss = F.nll_loss(output, target)\n" +
-        this.forwardCode
+        this.forwardCode +
+        "\nloss = F.nll_loss(output, target)\n"
     } else {
       this.forwardCode
     }
     sharedJep.exec(forwardCode)
-    val outputNd = sharedJep.getValue("tensor_to_numpy(output)").asInstanceOf[NDArray[_]]
+    val outputNd = sharedJep.getValue("tensor_to_numpy(output.data.numpy())").asInstanceOf[NDArray[_]]
     output = PythonLoaderFeatureSet.ndArrayToTensor(outputNd)
     output
   }
 
   override def updateGradInput(input: Activity, gradOutput: Activity): Activity = {
+    loaded
     val backwardCode =
       s"""
         |loss.backward()
-        |grad=torch.nn.utils.parameters_to_vector(${getName()}.parameters())
+        |grads=[]
+        |for param in ${getName()}.parameters():
+        |    grads.append(param.grad.view(-1))
+        |grad=torch.nn.utils.parameters_to_vector(grads)
         |""".stripMargin
     sharedJep.exec(backwardCode)
     // TODO: just do a copy
     val grad = PythonLoaderFeatureSet.ndArrayToTensor(
-      sharedJep.getValue("grad.numpy()").asInstanceOf[NDArray[_]])
+      sharedJep.getValue("grad.data.numpy()").asInstanceOf[NDArray[_]])
+    println("gradients sum" + grad.sum())
     gradients.copy(grad)
 
     gradInput
@@ -99,8 +113,8 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, parameterLen
 
   override def zeroGradParameters(): Unit = {
     val zeroGradCode =
-      """
-        |for param in model.parameters():
+      s"""
+        |for param in ${this.getName()}.parameters():
         |    param.grad.fill_(0)
         |""".stripMargin
     sharedJep.exec(zeroGradCode)
@@ -116,7 +130,7 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, parameterLen
 
 object TorchNet2 {
   private val modelBytesRegistry = new RegistryMap[Array[Byte]]()
-  protected val sharedJep = PythonLoaderFeatureSet.getOrCreateInterpreter()
+  private[zoo] lazy val sharedJep = PythonLoaderFeatureSet.getOrCreateInterpreter()
 
   @transient
   private lazy val inDriver = NetUtils.isDriver

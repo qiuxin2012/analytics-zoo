@@ -91,3 +91,16 @@ class TorchCriterion(Criterion):
         shutil.rmtree(temp)
 
         return criterion
+
+
+class TorchCriterion2(Criterion):
+    """
+    TorchCriterion wraps a loss function for distributed inference or training.
+    Use TorchCriterion.from_pytorch to initialize.
+    """
+
+    def __init__(self, bigdl_type="float"):
+        """
+        :param bigdl_type:
+        """
+        super(TorchCriterion2, self).__init__(None, bigdl_type)
