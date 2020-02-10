@@ -243,12 +243,13 @@ object Estimator {
         optimMethod: OptimMethod[T],
         modelDir: String)(implicit ev: TensorNumeric[T]): Estimator[T] = {
     // TODO:
-    val model = TorchNet2(m, 431080).asInstanceOf[Module[T]]
-    if (null != modelDir && "" != modelDir) {
-      new Estimator[T](model, Map(model.getName() -> optimMethod), Some(modelDir))
-    } else {
-      new Estimator[T](model, Map(model.getName() -> optimMethod))
-    }
+//    val model = TorchNet2(m, 431080).asInstanceOf[Module[T]]
+//    if (null != modelDir && "" != modelDir) {
+//      new Estimator[T](model, Map(model.getName() -> optimMethod), Some(modelDir))
+//    } else {
+//      new Estimator[T](model, Map(model.getName() -> optimMethod))
+//    }
+    throw new UnsupportedOperationException()
   }
 
   /**

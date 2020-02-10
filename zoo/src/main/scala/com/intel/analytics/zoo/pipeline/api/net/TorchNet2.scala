@@ -22,7 +22,7 @@ import java.util.UUID
 
 import com.intel.analytics.bigdl.Module
 import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, Activity}
-import com.intel.analytics.bigdl.tensor.Tensor
+import com.intel.analytics.bigdl.tensor.{Storage, Tensor}
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.utils.T
 import com.intel.analytics.zoo.feature.PythonLoaderFeatureSet
@@ -34,7 +34,7 @@ import org.slf4j.LoggerFactory
 
 import scala.reflect.ClassTag
 //TODO parameter length optional? Train function
-class TorchNet2 private(private val modelHolder: TorchModelHolder2, parameterLength: Int)
+class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights: Array[Float])
   extends AbstractModule[Activity, Activity, Float]{
   import TorchNet2._
 
@@ -52,8 +52,8 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, parameterLen
     true
   }
 
-  val weights: Tensor[Float] = Tensor[Float](parameterLength).rand(-0.001, 0.001)
-  val gradients: Tensor[Float] = Tensor(parameterLength)
+  val weights: Tensor[Float] = Tensor[Float](Storage[Float](init_weights))
+  val gradients: Tensor[Float] = Tensor[Float](weights.size())
 
   override def parameters(): (Array[Tensor[Float]], Array[Tensor[Float]]) = {
     (Array(weights), Array(gradients))
@@ -176,7 +176,7 @@ object TorchNet2 {
 
   }
 
-  def apply(modelBytes: Array[Byte], parameterLength: Int): TorchNet2 = {
-    new TorchNet2(new TorchModelHolder2(modelBytes, UUID.randomUUID().toString), parameterLength)
+  def apply(modelBytes: Array[Byte], weights: Array[Float]): TorchNet2 = {
+    new TorchNet2(new TorchModelHolder2(modelBytes, UUID.randomUUID().toString), weights)
   }
 }
