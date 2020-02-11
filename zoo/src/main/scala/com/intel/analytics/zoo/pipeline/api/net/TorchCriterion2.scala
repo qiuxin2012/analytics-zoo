@@ -24,6 +24,7 @@ class TorchCriterion2 extends AbstractCriterion[Activity, Activity, Float]() {
   import TorchCriterion2._
 
   override def updateOutput(input: Activity, target: Activity): Float = {
+    println(Thread.currentThread())
     output = sharedJep.getValue("loss.item()").asInstanceOf[Double].toFloat
     output
   }

@@ -365,6 +365,7 @@ object PythonLoaderFeatureSet{
     interpRdd.mapPartitions{iter =>
       val interp = iter.next()
       interp.set("pyjarray", bcDataSet.value)
+      println(Thread.currentThread())
       interp.exec(load)
       Iterator.single(interp)
     }.count()
@@ -413,6 +414,7 @@ object PythonLoaderFeatureSet{
           config.setClassEnquirer(new NamingConventionClassEnquirer())
           SharedInterpreter.setConfig(config)
           sharedInterpreter = new SharedInterpreter()
+          println(Thread.currentThread())
           sharedInterpreter.exec(imports)
         }
       }
@@ -492,10 +494,12 @@ class PythonLoaderFeatureSet[T: ClassTag](
           override def next(): T = {
             val stat = System.nanoTime()
             try {
+              println(Thread.currentThread())
               interp.exec(nextCode)
             } catch {
               case e: Exception =>
                 if(e.getMessage().contains("StopIteration")) {
+                  println(Thread.currentThread())
                   interp.exec(s"${iterName} = enumerate($loaderName)")
                   interp.exec(nextCode)
                 }
@@ -519,6 +523,7 @@ class PythonLoaderFeatureSet[T: ClassTag](
       sharedInterp.mapPartitions{ dataIter =>
         val interp = dataIter.next()
         val len = interp.getValue(s"len($loaderName)").asInstanceOf[Long]
+        println(Thread.currentThread())
         interp.exec(s"${iterName} = enumerate($loaderName)")
         new Iterator[T] {
           var i = 0
@@ -534,6 +539,7 @@ class PythonLoaderFeatureSet[T: ClassTag](
           override def next(): T = {
             val stat = System.nanoTime()
             i += 1
+            println(Thread.currentThread())
             interp.exec(nextCode)
             val input = interp.getValue("data[0].numpy()").asInstanceOf[NDArray[Array[Float]]]
             val target = interp.getValue("data[1].numpy()").asInstanceOf[NDArray[Array[Long]]]

@@ -39,6 +39,7 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
   import TorchNet2._
 
   protected lazy val loaded = {
+    println(Thread.currentThread())
     sharedJep.set("model_bytes", modelHolder.torchBytes)
     val loadModelCode =
       s"""
@@ -48,6 +49,7 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
          |by = bytes(b % 256 for b in model_bytes)
          |${getName()} = ser.loads(by)
          |""".stripMargin
+    println(Thread.currentThread())
     sharedJep.exec(loadModelCode)
     true
   }
@@ -76,6 +78,7 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
   override def updateOutput(input: Activity): Activity = {
     // TODO: parameter from python
     loaded
+    println(Thread.currentThread())
     sharedJep.set("newWeight", weights.storage().array())
     val forwardCode = if (train) {
       println("weights sum" + weights.sum())
@@ -85,6 +88,7 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
     } else {
       this.forwardCode
     }
+    println(Thread.currentThread())
     sharedJep.exec(forwardCode)
     val outputNd = sharedJep.getValue("tensor_to_numpy(output.data.numpy())").asInstanceOf[NDArray[_]]
     output = PythonLoaderFeatureSet.ndArrayToTensor(outputNd)
@@ -100,6 +104,7 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
         |    grads.append(param.grad.view(-1))
         |grad=torch.nn.utils.parameters_to_vector(grads)
         |""".stripMargin
+    println(Thread.currentThread())
     sharedJep.exec(backwardCode)
     // TODO: just do a copy
     val gradSum = sharedJep.getValue("grad.data.numpy().sum()").asInstanceOf[Float]
@@ -117,6 +122,7 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
         |for param in ${this.getName()}.parameters():
         |    param.grad.fill_(0)
         |""".stripMargin
+    println(Thread.currentThread())
     sharedJep.exec(zeroGradCode)
     super.zeroGradParameters()
   }
