@@ -21,6 +21,7 @@ import com.intel.analytics.bigdl.optim._
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.zoo.feature.{DiskFeatureSet, DistributedFeatureSet, FeatureSet}
 import com.intel.analytics.zoo.pipeline.api.keras.models.InternalDistriOptimizer
+import com.intel.analytics.zoo.pipeline.api.net.TorchNet2
 import org.apache.log4j.Logger
 
 import scala.collection.mutable.ArrayBuffer
@@ -234,6 +235,21 @@ object Estimator {
     } else {
       new Estimator[T](model, Map(model.getName() -> optimMethod))
     }
+  }
+
+
+  def apply[T: ClassTag](
+        m: Array[Byte],
+        optimMethod: OptimMethod[T],
+        modelDir: String)(implicit ev: TensorNumeric[T]): Estimator[T] = {
+    // TODO:
+//    val model = TorchNet2(m, 431080).asInstanceOf[Module[T]]
+//    if (null != modelDir && "" != modelDir) {
+//      new Estimator[T](model, Map(model.getName() -> optimMethod), Some(modelDir))
+//    } else {
+//      new Estimator[T](model, Map(model.getName() -> optimMethod))
+//    }
+    throw new UnsupportedOperationException()
   }
 
   /**

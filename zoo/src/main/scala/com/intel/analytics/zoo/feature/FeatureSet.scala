@@ -16,7 +16,6 @@
 
 package com.intel.analytics.zoo.feature
 
-import java.nio.file.Paths
 import java.util
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -400,7 +399,7 @@ object PythonLoaderFeatureSet{
   }
 
   private var sharedInterpreter: SharedInterpreter = null
-  protected def getOrCreateInterpreter(): SharedInterpreter = {
+  private[zoo] def getOrCreateInterpreter(): SharedInterpreter = {
     if (sharedInterpreter == null) {
       this.synchronized {
         if (sharedInterpreter == null) {
@@ -439,7 +438,7 @@ object PythonLoaderFeatureSet{
     }
   }
 
-  protected def ndArrayToTensor(ndArray: NDArray[_]): Tensor[Float] = {
+  private[zoo] def ndArrayToTensor(ndArray: NDArray[_]): Tensor[Float] = {
     val array = ndArray.asInstanceOf[NDArray[Array[_]]]
     val data = array.getData()
     data(0) match {
@@ -495,6 +494,7 @@ class PythonLoaderFeatureSet[T: ClassTag](
             } catch {
               case e: Exception =>
                 if (e.getMessage().contains("End of sequence") ||
+                  e.getMessage().contains("StopIteration") ||
                   e.getMessage().contains("is not defined")) {
                   interp.exec(getIteratorCode)
                   interp.exec(nextCode)
@@ -502,7 +502,14 @@ class PythonLoaderFeatureSet[T: ClassTag](
                   throw e
                 }
             }
-            val inputs = toArrayTensor(interp.getValue(inputName))
+            val inputs = if (inputName != "") {
+              toArrayTensor(interp.getValue(inputName))
+            } else {
+              // TODO: find true size
+              val batchSize = interp.getValue(s"${loaderName}.batch_size")
+                  .asInstanceOf[Int]
+              Array(Tensor[Float](batchSize))
+            }
             val miniBatch = if (targetName != "") {
               val targets = toArrayTensor(interp.getValue(targetName))
               MiniBatch[Float](inputs, targets)
@@ -529,7 +536,8 @@ class PythonLoaderFeatureSet[T: ClassTag](
                   interp.exec(nextCode)
                 } catch {
                   case e: Exception =>
-                    if (e.getMessage().contains("End of sequence")) {
+                    if (e.getMessage().contains("End of sequence") ||
+                      e.getMessage().contains("StopIteration")) {
                       return false
                     } else {
                       throw e
@@ -544,7 +552,14 @@ class PythonLoaderFeatureSet[T: ClassTag](
             if (!alreadyNext) {
               interp.exec(nextCode)
             }
-            val inputs = toArrayTensor(interp.getValue(inputName))
+            val inputs = if (inputName != "") {
+              toArrayTensor(interp.getValue(inputName))
+            } else {
+              // TODO: find true size
+              val batchSize = interp.getValue(s"${loaderName}.batch_size")
+                .asInstanceOf[Int]
+              Array(Tensor[Float](batchSize))
+            }
             val miniBatch = if (targetName != "") {
               val targets = toArrayTensor(interp.getValue(targetName))
               MiniBatch[Float](inputs, targets)

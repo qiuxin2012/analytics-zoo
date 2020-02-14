@@ -52,6 +52,12 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
     Estimator(model, optimMethods.asScala.toMap, modelDir)
   }
 
+  def createPytorchEstimator(model: Array[Byte],
+                             optimMethod: OptimMethod[T],
+                             modelDir: String): Unit = {
+    Estimator(model, optimMethod, modelDir)
+  }
+
   def estimatorEvaluate(estimator: Estimator[T], validationSet: FeatureSet[Sample[T]],
                         validationMethod: JList[ValidationMethod[T]], batchSize: Int
                        ): Map[ValidationMethod[T], ValidationResult] = {
@@ -108,6 +114,13 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
       validationSet, Option(validationMethod).map(_.asScala.toArray).orNull)
   }
 
+  def estimatorEvaluateMiniBatch(
+      estimator: Estimator[T],
+      validationMiniBatch: FeatureSet[MiniBatch[T]],
+      validationMethod: JList[ValidationMethod[T]]
+      ): Map[ValidationMethod[T], ValidationResult] = {
+    estimator.evaluate(validationMiniBatch, validationMethod.asScala.toArray)
+  }
 
   def estimatorTrainImageFeature(estimator: Estimator[T],
                                  trainSet: FeatureSet[ImageFeature],

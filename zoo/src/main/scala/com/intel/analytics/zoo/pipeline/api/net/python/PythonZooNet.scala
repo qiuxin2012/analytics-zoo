@@ -168,8 +168,16 @@ class PythonZooNet[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonZoo
       TorchNet(modelPath)
   }
 
+  def createTorchNet2(model: Array[Byte], weights: JList[Double]): TorchNet2 = {
+    TorchNet2(model, weights.asScala.toArray.map(_.toFloat))
+  }
+
   def createTorchCriterion(lossPath: String): TorchCriterion = {
     TorchCriterion(lossPath)
+  }
+
+  def createTorchCriterion2(): TorchCriterion2 = {
+    TorchCriterion2()
   }
 
   def torchNetSavePytorch(torchnet: TorchNet, path: String): Unit = {

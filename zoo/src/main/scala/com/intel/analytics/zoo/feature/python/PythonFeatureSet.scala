@@ -87,24 +87,54 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
     // set a random seed to make sure shuffle is the same in each executor
     val imports =
       s"""
-        |import tensorflow as tf
-        |from zoo.util.nest import flatten
-        |sess = tf.Session()
-        |""".stripMargin
+         |import tensorflow as tf
+         |from zoo.util.nest import flatten
+         |sess = tf.Session()
+         |""".stripMargin
+
     def getIterator(iterName: String, loaderName: String): String = {
       s"""
          |${iterName} = ${loaderName}.make_one_shot_iterator()
          |""".stripMargin
     }
+
     def getNext(iterName: String): String = {
       s"""
-        |data = sess.run(${iterName}.get_next())
-        |data = flatten(data)
-        |""".stripMargin
+         |data = sess.run(${iterName}.get_next())
+         |data = flatten(data)
+         |""".stripMargin
     }
+
     FeatureSet.python[MiniBatch[Float]](dataset,
       getIterator, getNext,
       "data", "", totalSize, imports)
+  }
+
+  def createFeatureSetFromPython(
+        dataset: Array[Byte],
+        totalSize: Int): FeatureSet[MiniBatch[Float]] = {
+    val nodeNumber = EngineRef.getNodeNumber()
+    // set a random seed to make sure shuffle is the same in each executor
+    val imports = ""
+
+    def getIterator(iterName: String, loaderName: String): String = {
+      s"""
+         |${iterName} = enumerate(${loaderName})
+         |""".stripMargin
+    }
+
+    def getNext(iterName: String): String = {
+      s"""
+         |index, data = next(${iterName})
+         |""".stripMargin
+    }
+
+    FeatureSet.python[MiniBatch[Float]](dataset, getIterator, getNext,
+      "", "", totalSize, imports)
+  }
+
+  def size(featureSet: DataSet[MiniBatch[Float]]): Long = {
+    featureSet.size()
   }
 
 }

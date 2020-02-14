@@ -32,6 +32,28 @@ if sys.version >= '3':
     long = int
     unicode = str
 
+class TorchNet2(Layer):
+    """
+    TorchNet wraps a TorchScript model as a single layer, thus the Pytorch model can be used for
+    distributed inference or training.
+    :param path: path to the TorchScript model.
+    """
+
+    def __init__(self, module_bytes, weights, bigdl_type="float"):
+        weights = [float(v) for v in weights]
+        super(TorchNet2, self).__init__(None, bigdl_type, module_bytes, weights)
+
+    @staticmethod
+    def from_pytorch(model):
+        weights=[]
+        for param in model.parameters():
+            weights.append(param.view(-1))
+        flatten_weight = torch.nn.utils.parameters_to_vector(weights).data.numpy()
+        from pyspark.serializers import CloudPickleSerializer
+        bys = CloudPickleSerializer.dumps(CloudPickleSerializer, model)
+        net = TorchNet2(bys, list(flatten_weight))
+
+        return net
 
 class TorchNet(Layer):
     """
