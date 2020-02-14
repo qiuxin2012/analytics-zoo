@@ -509,7 +509,7 @@ class PythonLoaderFeatureSet[T: ClassTag](
               toArrayTensor(interp.getValue(inputName))
             } else {
               // TODO: find true size
-              val batchSize = interp.getValue(s"${loaderName}.batch_size")
+              val batchSize = interp.getValue(s"${localLoaderName}.batch_size")
                   .asInstanceOf[Int]
               Array(Tensor[Float](batchSize))
             }
@@ -559,7 +559,7 @@ class PythonLoaderFeatureSet[T: ClassTag](
               toArrayTensor(interp.getValue(inputName))
             } else {
               // TODO: find true size
-              val batchSize = interp.getValue(s"${loaderName}.batch_size")
+              val batchSize = interp.getValue(s"${localLoaderName}.batch_size")
                 .asInstanceOf[Int]
               Array(Tensor[Float](batchSize))
             }
