@@ -47,7 +47,7 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
          |import torch.nn as nn
          |import torch.nn.functional as F
          |by = bytes(b % 256 for b in model_bytes)
-         |${getName()} = ser.loads(by)
+         |${getName()} = CloudPickleSerializer.loads(CloudPickleSerializer, by)
          |""".stripMargin
     println(Thread.currentThread())
     sharedJep.exec(loadModelCode)
