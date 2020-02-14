@@ -359,7 +359,10 @@ object PythonLoaderFeatureSet{
       val load = s"""
         |by${partId} = bytes(b % 256 for b in pyjarray)
         |func${partId} = CloudPickleSerializer.loads(CloudPickleSerializer, by${partId})
-        |${getLocalLoader(loaderName)} = func${partId}().shard(${nodeNumber}, ${partId})
+        |if(callable(func${partId})):
+        |  ${getLocalLoader(loaderName)} = func${partId}().shard(${nodeNumber}, ${partId})
+        |else:
+        |  ${getLocalLoader(loaderName)} = func${partId}
         |""".stripMargin
 
       interp.exec(load)

@@ -94,6 +94,7 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
     output = PythonLoaderFeatureSet.ndArrayToTensor(outputNd)
     output
   }
+
   override def updateGradInput(input: Activity, gradOutput: Activity): Activity = {
     loaded
     val backwardCode =

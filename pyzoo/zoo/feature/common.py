@@ -369,7 +369,7 @@ class FeatureSet(DataSet):
         """
         import pickle
         by = bytearray(pickle.dumps(dataset))
-        jvalue = callZooFunc(bigdl_type, "createFeatureSetFromPython", by)
+        jvalue = callZooFunc(bigdl_type, "createFeatureSetFromPython", by, len(dataset))
         return cls(jvalue=jvalue)
 
     def transform(self, transformer):
