@@ -560,7 +560,7 @@ class PythonLoaderFeatureSet[T: ClassTag](
             } else {
               // TODO: find true size
               val batchSize = interp.getValue(s"${localLoaderName}.batch_size")
-                .asInstanceOf[Int]
+                .asInstanceOf[Long].toInt
               Array(Tensor[Float](batchSize))
             }
             val miniBatch = if (targetName != "") {
