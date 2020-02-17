@@ -145,6 +145,7 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
     def getNext(iterName: String): String = {
       s"""
          |index, data = next(${iterName})
+         |data = tuple_to_numpy(data)
          |""".stripMargin
     }
 
