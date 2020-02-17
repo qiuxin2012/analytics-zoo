@@ -145,12 +145,11 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
     def getNext(iterName: String): String = {
       s"""
          |index, data = next(${iterName})
-         |data = tuple_to_numpy(data)
          |""".stripMargin
     }
 
     FeatureSet.python[MiniBatch[Float]](dataset, getIterator, getNext,
-      "data[0]", "data[1]", totalSize, imports)
+      "tuple_to_numpy(data[0])", "tuple_to_numpy(data[1])", totalSize, imports)
   }
 
   def size(featureSet: DataSet[MiniBatch[Float]]): Long = {
