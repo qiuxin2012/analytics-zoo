@@ -41,7 +41,9 @@ class TorchNet2(Layer):
 
     def __init__(self, module_bytes, weights, bigdl_type="float"):
         weights = [float(v) for v in weights]
-        super(TorchNet2, self).__init__(None, bigdl_type, module_bytes, weights)
+        self.value = callZooFunc(
+            bigdl_type, self.jvm_class_constructor(), module_bytes, weights)
+        self.bigdl_type = bigdl_type
 
     @staticmethod
     def from_pytorch(model):
