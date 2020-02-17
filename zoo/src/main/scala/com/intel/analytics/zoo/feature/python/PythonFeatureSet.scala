@@ -149,7 +149,7 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
     }
 
     FeatureSet.python[MiniBatch[Float]](dataset, getIterator, getNext,
-      "", "", totalSize, imports)
+      "data[0]", "data[1]", totalSize, imports)
   }
 
   def size(featureSet: DataSet[MiniBatch[Float]]): Long = {
