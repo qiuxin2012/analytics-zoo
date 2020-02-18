@@ -56,7 +56,7 @@ class TorchNet2(Layer):
         flatten_weight = torch.nn.utils.parameters_to_vector(weights).data.numpy()
         from pyspark.serializers import CloudPickleSerializer
         bys = CloudPickleSerializer.dumps(CloudPickleSerializer, model)
-        net = TorchNet2(bys, list(flatten_weight))
+        net = TorchNet2(bys, flatten_weight)
 
         return net
 
