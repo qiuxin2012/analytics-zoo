@@ -114,7 +114,7 @@ def main():
     # optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
     model.train()
-    adam = SGD()
+    adam = Adam(1e-2)
     zooModel = TorchNet2.from_pytorch(model)
     zooCriterion = TorchCriterion2()
     # from bigdl.models.lenet.lenet5 import build_model
@@ -133,8 +133,8 @@ def main():
     # print(c)
     # print(test_featureSet.to_dataset().size())
     # estimator.evaluate_minibatch(train_featureSet, [Accuracy()])
-    from bigdl.optim.optimizer import MaxEpoch, EveryEpoch
-    estimator.train_minibatch(train_featureSet, zooCriterion, end_trigger=MaxEpoch(1), checkpoint_trigger=EveryEpoch(),
+    from bigdl.optim.optimizer import MaxEpoch, EveryEpoch, MaxIteration
+    estimator.train_minibatch(train_featureSet, zooCriterion, end_trigger=MaxEpoch(3), checkpoint_trigger=EveryEpoch(),
                               validation_set=test_featureSet, validation_method=[Accuracy()])
 
 if __name__ == '__main__':

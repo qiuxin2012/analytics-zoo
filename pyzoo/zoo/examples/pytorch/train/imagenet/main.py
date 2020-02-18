@@ -6,8 +6,8 @@ import torchvision
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
-from zoo.pipeline.api.net.torch_net import TorchNet
-from zoo.pipeline.api.net.torch_criterion import TorchCriterion
+from zoo.pipeline.api.net.torch_net import TorchNet2
+from zoo.pipeline.api.net.torch_criterion import TorchCriterion2
 from zoo.pipeline.estimator import *
 from bigdl.optim.optimizer import SGD, Adam
 from zoo.common.nncontext import *
@@ -113,19 +113,20 @@ def main():
                     "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
     model.train()
     adam = Adam()
-    zooModel = TorchNet.from_pytorch(model, [1, 3, 224, 224])
+    zooModel = TorchNet2.from_pytorch(model)
     # from bigdl.models.lenet.lenet5 import build_model
     # zooModel = build_model(10)
     criterion = nn.CrossEntropyLoss()
     def lossFunc(input, target):
         return criterion.forward(input, target.flatten().long())
 
-    zooCriterion = TorchCriterion.from_pytorch(lossFunc, [1, 1000], torch.LongTensor([1]))
+    # zooCriterion = TorchCriterion.from_pytorch(lossFunc, [1, 1000], torch.LongTensor([1]))
+    zooCriterion = TorchCriterion2()
     # zooCriterion = SparseCategoricalCrossEntropy(zero_based_label=True)
     # from bigdl.nn.criterion import ClassNLLCriterion
     # zooCriterion = ClassNLLCriterion()
     estimator = Estimator(zooModel, optim_methods=adam)
-    train_featureSet = FeatureSet.python(train_loader)
+    train_featureSet = FeatureSet.data_loader(train_loader)
     c = train_featureSet.to_dataset().size()
     print(c)
     # estimator.evaluate_minibatch(train_featureSet, [Accuracy()])
