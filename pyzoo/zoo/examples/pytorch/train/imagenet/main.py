@@ -94,6 +94,16 @@ def main():
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=1)
 
+    val_loader = torch.utils.data.DataLoader(
+        datasets.ImageFolder(valdir, transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            normalize,
+            ])),
+            batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers, pin_memory=True)
+
     model = torchvision.models.resnet50()
     # optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
@@ -127,11 +137,14 @@ def main():
     # zooCriterion = ClassNLLCriterion()
     estimator = Estimator(zooModel, optim_methods=adam)
     train_featureSet = FeatureSet.data_loader(train_loader)
+    test_featureSet = FeatureSet.data_loader(val_loader)
     c = train_featureSet.to_dataset().size()
     print(c)
     # estimator.evaluate_minibatch(train_featureSet, [Accuracy()])
-    from bigdl.optim.optimizer import MaxEpoch
-    estimator.train_minibatch(train_featureSet, zooCriterion, end_trigger=MaxEpoch(10))
+    from bigdl.optim.optimizer import MaxEpoch, EveryEpoch
+    from zoo.pipeline.api.keras.metrics import Accuracy
+    estimator.train_minibatch(train_featureSet, zooCriterion, end_trigger=MaxEpoch(3), checkpoint_trigger=EveryEpoch(),
+                              validation_set=test_featureSet, validation_method=[Accuracy()])
 
 if __name__ == '__main__':
     main()
