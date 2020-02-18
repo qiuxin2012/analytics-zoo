@@ -79,24 +79,28 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
     // TODO: parameter from python
     loaded
     println(Thread.currentThread())
-    sharedJep.set("newWeight", weights.storage().array())
+    val startTime = System.nanoTime()
     val forwardCode = if (train) {
+      sharedJep.set("newWeight", weights.storage().array())
       println("weights sum" + weights.sum())
       setWeightCode +
         this.forwardCode +
-        "\nloss = F.nll_loss(output, target)\n"
+        "\nloss = F.cross_entropy(output, target)\n"
     } else {
       this.forwardCode
     }
     println(Thread.currentThread())
     sharedJep.exec(forwardCode)
+    println(s"run forward cost: ${(System.nanoTime() - startTime) / 1e-9}")
     val outputNd = sharedJep.getValue("tensor_to_numpy(output.data.numpy())").asInstanceOf[NDArray[_]]
     output = PythonLoaderFeatureSet.ndArrayToTensor(outputNd)
+    println(s"forward total cost: ${(System.nanoTime() - startTime) / 1e-9}")
     output
   }
 
   override def updateGradInput(input: Activity, gradOutput: Activity): Activity = {
     loaded
+    val startTime = System.nanoTime()
     val backwardCode =
       s"""
         |loss.backward()
@@ -107,13 +111,14 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
         |""".stripMargin
     println(Thread.currentThread())
     sharedJep.exec(backwardCode)
+    println(s"run backward cost: ${(System.nanoTime() - startTime) / 1e-9}")
     // TODO: just do a copy
     val gradSum = sharedJep.getValue("grad.data.numpy().sum()").asInstanceOf[Float]
     val grad = PythonLoaderFeatureSet.ndArrayToTensor(
       sharedJep.getValue("grad.data.numpy()").asInstanceOf[NDArray[_]])
     println("gradients sum: " + grad.sum() + ", while python side: " + gradSum)
     gradients.copy(grad)
-
+    println(s"backward total cost: ${(System.nanoTime() - startTime) / 1e-9}")
     gradInput
   }
 
