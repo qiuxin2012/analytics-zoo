@@ -23,14 +23,17 @@ import torch
 from pyspark import RDD
 
 from bigdl.nn.layer import Layer
+from bigdl.util.common import JTensor
 from zoo import getOrCreateSparkContext
 from zoo.common.utils import callZooFunc
 from zoo.feature.image import ImageSet
 from zoo.tfpark.tfnet import to_sample_rdd
 
+
 if sys.version >= '3':
     long = int
     unicode = str
+
 
 class TorchNet2(Layer):
     """
@@ -40,7 +43,7 @@ class TorchNet2(Layer):
     """
 
     def __init__(self, module_bytes, weights, bigdl_type="float"):
-        weights = [float(v) for v in weights]
+        weights = JTensor.from_ndarray(weights)
         self.value = callZooFunc(
             bigdl_type, self.jvm_class_constructor(), module_bytes, weights)
         self.bigdl_type = bigdl_type

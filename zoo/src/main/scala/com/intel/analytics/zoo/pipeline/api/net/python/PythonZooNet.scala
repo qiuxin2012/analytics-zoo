@@ -21,6 +21,7 @@ import java.util.{ArrayList, List => JList}
 import com.intel.analytics.bigdl.Module
 import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, Activity}
 import com.intel.analytics.bigdl.nn.keras.KerasLayer
+import com.intel.analytics.bigdl.python.api.JTensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.zoo.common.PythonZoo
 import com.intel.analytics.zoo.pipeline.api.Net
@@ -168,8 +169,8 @@ class PythonZooNet[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonZoo
       TorchNet(modelPath)
   }
 
-  def createTorchNet2(model: Array[Byte], weights: JList[Double]): TorchNet2 = {
-    TorchNet2(model, weights.asScala.toArray.map(_.toFloat))
+  def createTorchNet2(model: Array[Byte], weights: JTensor): TorchNet2 = {
+    TorchNet2(model, weights.storage)
   }
 
   def createTorchCriterion(lossPath: String): TorchCriterion = {
