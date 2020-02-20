@@ -105,6 +105,14 @@ def main():
             num_workers=args.workers, pin_memory=True)
 
     model = torchvision.models.resnet50()
+    #criterion = nn.CrossEntropyLoss()
+    #import time
+    #for i, (images, target) in enumerate(train_loader):
+    #    s = time.time()
+    #    output = model(images)
+    #    loss = criterion(output, target)
+    #    print(str(i) + ": " + str(loss.data.item()) + " " + str(time.time() - s))
+
     # optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
     num_executors = 1
