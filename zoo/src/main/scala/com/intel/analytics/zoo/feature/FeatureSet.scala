@@ -404,7 +404,7 @@ object PythonLoaderFeatureSet{
   private var sharedInterpreter: SharedInterpreter = null
   private[zoo] def getOrCreateInterpreter(): SharedInterpreter = {
     if (sharedInterpreter == null) {
-      this.synchronized {
+      try {
         if (sharedInterpreter == null) {
           val config: JepConfig = new JepConfig()
           config.setClassEnquirer(new NamingConventionClassEnquirer())
@@ -414,9 +414,15 @@ object PythonLoaderFeatureSet{
             s"""
                |import tensorflow as tf
                |tf.compat.v1.set_random_seed(${1000})
+               |import os
+               |os.environ['OMP_NUM_THREADS']='4'
                |""".stripMargin
           sharedInterpreter.exec(str)
         }
+      } catch {
+        case e: Exception =>
+          println(e)
+      
       }
     }
     sharedInterpreter

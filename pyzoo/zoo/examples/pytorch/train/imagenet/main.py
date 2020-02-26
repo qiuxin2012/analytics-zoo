@@ -118,17 +118,18 @@ def main():
     num_executors = 1
     num_cores_per_executor = 4
     hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
-    sc = init_spark_on_yarn(
-        hadoop_conf=hadoop_conf_dir,
-        conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
-        num_executor=num_executors,
-        executor_cores=num_cores_per_executor,
-        executor_memory="10g",
-        driver_memory="10g",
-        driver_cores=1,
-        spark_conf={"spark.rpc.message.maxSize": "1024",
-                    "spark.task.maxFailures":  "1",
-                    "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
+    sc = init_spark_on_local(cores=16, conf={"spark.driver.memory": "10g"})
+    #sc = init_spark_on_yarn(
+    #    hadoop_conf=hadoop_conf_dir,
+    #    conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
+    #    num_executor=num_executors,
+    #    executor_cores=num_cores_per_executor,
+    #    executor_memory="10g",
+    #    driver_memory="10g",
+    #    driver_cores=1,
+    #    spark_conf={"spark.rpc.message.maxSize": "1024",
+    #                "spark.task.maxFailures":  "1",
+    #                "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
     model.train()
     adam = Adam()
     zooModel = TorchNet2.from_pytorch(model)

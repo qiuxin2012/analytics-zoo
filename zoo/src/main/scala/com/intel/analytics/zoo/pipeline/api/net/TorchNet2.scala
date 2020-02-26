@@ -46,8 +46,11 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
          |import torch
          |import torch.nn as nn
          |import torch.nn.functional as F
+         |import torchvision
          |by = bytes(b % 256 for b in model_bytes)
          |${getName()} = CloudPickleSerializer.loads(CloudPickleSerializer, by)
+         |${getName()} = torchvision.models.resnet50()
+         |criterion = nn.CrossEntropyLoss()
          |""".stripMargin
     println(Thread.currentThread())
     sharedJep.exec(loadModelCode)
@@ -85,7 +88,7 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
       println("weights sum" + weights.sum())
       setWeightCode +
         this.forwardCode +
-        "\nloss = F.cross_entropy(output, target)\n"
+        "\nloss = criterion(output, target)\n"
     } else {
       this.forwardCode
     }

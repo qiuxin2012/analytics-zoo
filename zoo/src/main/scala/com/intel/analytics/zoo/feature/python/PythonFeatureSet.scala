@@ -134,6 +134,9 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
                      |def tuple_to_numpy(data):
                      |    return tuple([tensor_to_numpy(d) for d in data])
                      |
+                     |import torch
+                     |torch.set_num_threads(16)
+                     |
                      |""".stripMargin
 
     def getIterator(iterName: String, loaderName: String): String = {

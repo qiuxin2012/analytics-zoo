@@ -53,6 +53,9 @@ class UtilsSpec extends FlatSpec with Matchers {
   }
 
   "123" should "work" in {
+    val config: JepConfig = new JepConfig()
+    config.setClassEnquirer(new NamingConventionClassEnquirer())
+    SharedInterpreter.setConfig(config)
     val c = new SharedInterpreter()
     val str =
       s"""
@@ -66,6 +69,7 @@ class UtilsSpec extends FlatSpec with Matchers {
          |from zoo.pipeline.api.net.torch_criterion import TorchCriterion2
          |from zoo.pipeline.estimator import *
          |
+         |normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
          |train_dataset = datasets.ImageFolder(
          |    '/media/xin/small/train',
          |    transforms.Compose([
@@ -76,9 +80,7 @@ class UtilsSpec extends FlatSpec with Matchers {
          |    ]))
          |
          |train_loader = torch.utils.data.DataLoader(
-         |    train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=1)
-         |
-         |train_featureSet = FeatureSet.data_loader(train_loader)
+         |    train_dataset, batch_size=32, shuffle=True, pin_memory=True, num_workers=1)
          |
          |model = torchvision.models.resnet50()
          |model.train()
@@ -90,5 +92,8 @@ class UtilsSpec extends FlatSpec with Matchers {
          |    loss = criterion(output, target)
          |    print(str(i) + ": " + str(loss.data.item()) + " " + str(time.time() - s))
          |""".stripMargin
+       val start = System.nanoTime()  
+       c.exec(str)
+       println((System.nanoTime() - start) / 1e9)
   }
 }
