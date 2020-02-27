@@ -22,6 +22,8 @@ model_names = sorted(name for name in torchvision.models.__dict__
                      and callable(torchvision.models.__dict__[name]))
 
 def main():
+    sc = init_nncontext()
+    Estimator.test()
     # Training settings
     parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
     parser.add_argument('data', metavar='DIR',
@@ -118,7 +120,8 @@ def main():
     num_executors = 1
     num_cores_per_executor = 4
     hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
-    sc = init_spark_on_local(cores=16, conf={"spark.driver.memory": "10g"})
+    sc = init_nncontext(conf={"spark.driver.memory": "10g"})
+    sc = init_spark_on_local(cores=4, conf={"spark.driver.memory": "10g"})
     #sc = init_spark_on_yarn(
     #    hadoop_conf=hadoop_conf_dir,
     #    conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env

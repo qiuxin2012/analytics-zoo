@@ -16,10 +16,13 @@
 
 package com.intel.analytics.zoo.common
 
-import com.intel.analytics.bigdl.utils.RandomGenerator
+import com.intel.analytics.bigdl.utils.{Engine, RandomGenerator}
 import jep._
 import org.apache.hadoop.fs.Path
+import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{FlatSpec, Matchers}
+import com.intel.analytics.zoo.common.NNContext.initNNContext
+import com.intel.analytics.zoo.pipeline.estimator.python.PythonEstimator
 
 
 class UtilsSpec extends FlatSpec with Matchers {
@@ -71,7 +74,7 @@ class UtilsSpec extends FlatSpec with Matchers {
          |
          |normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
          |train_dataset = datasets.ImageFolder(
-         |    '/media/xin/small/train',
+         |    '/home/xin/datasets/imagenet-small/train',
          |    transforms.Compose([
          |        transforms.RandomResizedCrop(224),
          |        transforms.RandomHorizontalFlip(),
@@ -92,8 +95,20 @@ class UtilsSpec extends FlatSpec with Matchers {
          |    loss = criterion(output, target)
          |    print(str(i) + ": " + str(loss.data.item()) + " " + str(time.time() - s))
          |""".stripMargin
-       val start = System.nanoTime()  
+       val start = System.nanoTime()
        c.exec(str)
        println((System.nanoTime() - start) / 1e9)
+  }
+
+  "12345" should "work" in {
+    import com.intel.analytics.bigdl.utils.Engine
+    System.setProperty("bigdl.localMode", "true")
+    System.setProperty("spark.master", "local[4]")
+    val sc =initNNContext("1234")
+//    val sc = new SparkContext(new SparkConf().setAppName("1234").setMaster("local[4]")
+//    .set("spark.shuffle.reduceLocality.enabled", "false"))
+//    Engine.init
+   new PythonEstimator[Float]().estimatorTest()
+
   }
 }

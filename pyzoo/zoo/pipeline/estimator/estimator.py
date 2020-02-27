@@ -43,6 +43,10 @@ class Estimator(JavaValue):
     def count(bigdl_type="float"):
         callZooFunc(bigdl_type, "count")
 
+    @staticmethod
+    def test(bigdl_type="float"):
+        callZooFunc(bigdl_type, "estimatorTest")
+
     def set_constant_gradient_clipping(self, min, max):
         """
         Set constant gradient clipping during the training process.

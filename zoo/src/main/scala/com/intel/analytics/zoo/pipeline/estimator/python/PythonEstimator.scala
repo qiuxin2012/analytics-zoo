@@ -28,6 +28,8 @@ import com.intel.analytics.bigdl.utils.Table
 import com.intel.analytics.zoo.common.PythonZoo
 import com.intel.analytics.zoo.feature.FeatureSet
 import com.intel.analytics.zoo.pipeline.estimator.Estimator
+import jep.{JepConfig, NamingConventionClassEnquirer, SharedInterpreter}
+import org.apache.spark.SparkContext
 
 import scala.reflect.ClassTag
 import scala.collection.JavaConverters._
@@ -120,6 +122,57 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
       validationMethod: JList[ValidationMethod[T]]
       ): Map[ValidationMethod[T], ValidationResult] = {
     estimator.evaluate(validationMiniBatch, validationMethod.asScala.toArray)
+  }
+
+  def estimatorTest(): Double = {
+    val sc = SparkContext.getOrCreate()
+    val rdd = sc.parallelize(0 to 100, 1)
+    rdd.mapPartitions{iter =>
+      val config: JepConfig = new JepConfig()
+      config.setClassEnquirer(new NamingConventionClassEnquirer())
+      SharedInterpreter.setConfig(config)
+      val c = new SharedInterpreter()
+      val str =
+        s"""
+           |import torch
+           |import torch.nn as nn
+           |import torchvision
+           |import torch.nn.functional as F
+           |import torch.optim as optim
+           |from torchvision import datasets, transforms
+           |from zoo.pipeline.api.net.torch_net import TorchNet2
+           |from zoo.pipeline.api.net.torch_criterion import TorchCriterion2
+           |from zoo.pipeline.estimator import *
+           |
+           |normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+           |train_dataset = datasets.ImageFolder(
+           |    '/home/xin/datasets/imagenet-small/train',
+           |    transforms.Compose([
+           |        transforms.RandomResizedCrop(224),
+           |        transforms.RandomHorizontalFlip(),
+           |        transforms.ToTensor(),
+           |        normalize,
+           |    ]))
+           |
+           |train_loader = torch.utils.data.DataLoader(
+           |    train_dataset, batch_size=32, shuffle=True, pin_memory=True, num_workers=1)
+           |
+           |model = torchvision.models.resnet50()
+           |model.train()
+           |criterion = nn.CrossEntropyLoss()
+           |import time
+           |for i, (images, target) in enumerate(train_loader):
+           |    s = time.time()
+           |    output = model(images)
+           |    loss = criterion(output, target)
+           |    loss.backward()
+           |    print(str(i) + ": " + str(loss.data.item()) + " " + str(time.time() - s))
+           |""".stripMargin
+      val start = System.nanoTime()
+      c.exec(str)
+      println((System.nanoTime() - start) / 1e9)
+      Iterator.single((System.nanoTime() - start) / 1e9)
+    }.reduce(_ + _)
   }
 
   def estimatorTrainImageFeature(estimator: Estimator[T],
