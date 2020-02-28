@@ -124,6 +124,23 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
     estimator.evaluate(validationMiniBatch, validationMethod.asScala.toArray)
   }
 
+  def printOmpThread(): String = {
+    val sc = SparkContext.getOrCreate()
+    val rdd = sc.parallelize(0 to 100, 1)
+    rdd.mapPartitions{iter =>
+      val c = PythonLoaderFeatureSet.getOrCreateInterpreter()
+      val str =
+        s"""
+           |import os
+           |""".stripMargin
+      c.exec(str)
+      val v = c.getValue("os.environ['OMP_NUM_THREADS']").asInstanceOf[String]
+      println(v)
+      Iterator.single(v)
+    }.reduce(_ + _)
+
+  }
+
   def estimatorTest(): Double = {
     val sc = SparkContext.getOrCreate()
     val rdd = sc.parallelize(0 to 100, 1)

@@ -47,6 +47,10 @@ class Estimator(JavaValue):
     def test(bigdl_type="float"):
         callZooFunc(bigdl_type, "estimatorTest")
 
+    @staticmethod
+    def print(bigdl_type="float"):
+        callZooFunc(bigdl_type, "printOmpThread")
+
     def set_constant_gradient_clipping(self, min, max):
         """
         Set constant gradient clipping during the training process.
