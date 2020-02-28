@@ -26,7 +26,7 @@ import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.transform.vision.image.{ImageFeature, ImageFeatureToMiniBatch}
 import com.intel.analytics.bigdl.utils.Table
 import com.intel.analytics.zoo.common.PythonZoo
-import com.intel.analytics.zoo.feature.FeatureSet
+import com.intel.analytics.zoo.feature.{FeatureSet, PythonLoaderFeatureSet}
 import com.intel.analytics.zoo.pipeline.estimator.Estimator
 import jep.{JepConfig, NamingConventionClassEnquirer, SharedInterpreter}
 import org.apache.spark.SparkContext
@@ -128,10 +128,7 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
     val sc = SparkContext.getOrCreate()
     val rdd = sc.parallelize(0 to 100, 1)
     rdd.mapPartitions{iter =>
-      val config: JepConfig = new JepConfig()
-      config.setClassEnquirer(new NamingConventionClassEnquirer())
-      SharedInterpreter.setConfig(config)
-      val c = new SharedInterpreter()
+      val c = PythonLoaderFeatureSet.getOrCreateInterpreter()
       val str =
         s"""
            |import torch

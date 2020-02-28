@@ -23,7 +23,31 @@ model_names = sorted(name for name in torchvision.models.__dict__
 
 def main():
     sc = init_nncontext()
+    # sc = init_spark_on_local(cores=16, conf={"spark.driver.memory": "10g"})
+    #hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
+    #num_executors = 1
+    #num_cores_per_executor = 16
+    #sc = init_spark_on_yarn(
+    #    hadoop_conf=hadoop_conf_dir,
+    #    conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
+    #    num_executor=num_executors,
+    #    executor_cores=num_cores_per_executor,
+    #    executor_memory="10g",
+    #    driver_memory="10g",
+    #    driver_cores=1,
+    #    spark_conf={"spark.rpc.message.maxSize": "1024",
+    #                "spark.task.maxFailures":  "1",
+    #                "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
+    import time
+    s = time.time()
     Estimator.test()
+    print("test 1: " + str(time.time() - s))    
+    Estimator.test()
+    print("test 2: " + str(time.time() - s))    
+    Estimator.test()
+    print("test 3: " + str(time.time() - s))    
+    Estimator.test()
+    print("test 4: " + str(time.time() - s))    
     # Training settings
     parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
     parser.add_argument('data', metavar='DIR',
@@ -117,11 +141,18 @@ def main():
 
     # optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
-    num_executors = 1
-    num_cores_per_executor = 4
-    hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
-    sc = init_nncontext(conf={"spark.driver.memory": "10g"})
-    sc = init_spark_on_local(cores=4, conf={"spark.driver.memory": "10g"})
+    #num_executors = 1
+    #num_cores_per_executor = 4
+    #hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
+    #sc = init_nncontext(conf={"spark.driver.memory": "10g"})
+    #from pyspark.conf import SparkConf
+    # spark_conf = SparkConf().setMaster("local[16]").setAppName("resnet") \
+    #              .set("spark.driver.memory", "10g") \
+    #              .set("spark.rpc.message.maxSize", "1024") \
+    #              .setExecutorEnv("OMP_NUM_THREADS", "16")
+    # spark_conf = {"spark.driver.memory": "10g", "spark.rpc.message.maxSize": "1024"}
+    #sc = init_nncontext()
+    #sc = init_spark_on_local(cores=16, conf={"spark.driver.memory": "10g"})
     #sc = init_spark_on_yarn(
     #    hadoop_conf=hadoop_conf_dir,
     #    conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
