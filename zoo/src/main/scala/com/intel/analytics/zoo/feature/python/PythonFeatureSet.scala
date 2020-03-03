@@ -18,8 +18,9 @@ package com.intel.analytics.zoo.feature.python
 
 import java.util
 
-import com.intel.analytics.bigdl.DataSet
+import com.intel.analytics.bigdl.{DataSet, Module}
 import com.intel.analytics.bigdl.dataset.{MiniBatch, Transformer, Sample => JSample}
+import com.intel.analytics.bigdl.models.utils.ModelBroadcast
 import com.intel.analytics.bigdl.python.api.Sample
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
@@ -30,6 +31,7 @@ import com.intel.analytics.zoo.feature.FeatureSet
 import com.intel.analytics.zoo.feature.pmem.MemoryType
 import com.intel.analytics.zoo.pipeline.api.keras.layers.utils.EngineRef
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.rdd.RDD
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -157,6 +159,23 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
 
   def size(featureSet: DataSet[MiniBatch[Float]]): Long = {
     featureSet.size()
+  }
+
+  // TODO: delete test code
+  def next(featureSet: DataSet[MiniBatch[Float]], model: Module[T]): Unit = {
+    val a = featureSet.toDistributed()
+    val dataset: RDD[MiniBatch[Float]] = a.data(false)
+    val bcModel = ModelBroadcast().broadcast(dataset.sparkContext, model)
+    dataset.mapPartitions{iter =>
+      val model = bcModel.value(true)
+      while(iter.hasNext) {
+        iter.next()
+        model.forward(Tensor[Float]())
+        model.backward(Tensor[Float](), Tensor[Float]())
+      }
+      Iterator.single(1)
+    }.count()
+
   }
 
 }

@@ -22,8 +22,8 @@ model_names = sorted(name for name in torchvision.models.__dict__
                      and callable(torchvision.models.__dict__[name]))
 
 def main():
-    sc = init_nncontext()
-    # sc = init_spark_on_local(cores=16, conf={"spark.driver.memory": "10g"})
+    # sc = init_nncontext()
+    sc = init_spark_on_local(cores=16, conf={"spark.driver.memory": "10g"})
     #hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
     #num_executors = 1
     #num_cores_per_executor = 16
@@ -38,16 +38,16 @@ def main():
     #    spark_conf={"spark.rpc.message.maxSize": "1024",
     #                "spark.task.maxFailures":  "1",
     #                "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
-    import time
-    s = time.time()
-    Estimator.test()
-    print("test 1: " + str(time.time() - s))    
-    Estimator.test()
-    print("test 2: " + str(time.time() - s))    
-    Estimator.test()
-    print("test 3: " + str(time.time() - s))    
-    Estimator.test()
-    print("test 4: " + str(time.time() - s))    
+    # import time
+    # s = time.time()
+    # Estimator.test()
+    # print("test 1: " + str(time.time() - s))
+    # Estimator.test()
+    # print("test 2: " + str(time.time() - s))
+    # Estimator.test()
+    # print("test 3: " + str(time.time() - s))
+    # Estimator.test()
+    # print("test 4: " + str(time.time() - s))
     # Training settings
     parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
     parser.add_argument('data', metavar='DIR',
@@ -119,6 +119,13 @@ def main():
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=1)
+
+    train_featureSet = FeatureSet.data_loader(train_loader)
+    model = torchvision.models.resnet50()
+    model.train()
+    adam = Adam()
+    zooModel = TorchNet2.from_pytorch(model)
+    train_featureSet.next(zooModel)
 
     val_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(valdir, transforms.Compose([
