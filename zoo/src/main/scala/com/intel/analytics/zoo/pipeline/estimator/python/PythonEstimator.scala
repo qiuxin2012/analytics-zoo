@@ -20,6 +20,7 @@ import java.util.{List => JList, Map => JMap}
 
 import com.intel.analytics.bigdl.{Criterion, Module}
 import com.intel.analytics.bigdl.dataset.{MiniBatch, Sample, SampleToMiniBatch}
+import com.intel.analytics.bigdl.models.utils.ModelBroadcast
 import com.intel.analytics.bigdl.optim.{OptimMethod, Trigger, ValidationMethod, ValidationResult}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
@@ -139,6 +140,32 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
       Iterator.single(v)
     }.reduce(_ + _)
 
+  }
+
+  // TODO: delete test code
+  def estimatorTest2(model: Module[T]): Unit = {
+    val sc = SparkContext.getOrCreate()
+    val bcModel = ModelBroadcast().broadcast(sc, model)
+    sc.range(1, 10, 1).mapPartitions{iter =>
+      val model = bcModel.value(true)
+      (0 to 32).foreach{i =>
+        val jep = PythonLoaderFeatureSet.getOrCreateInterpreter()
+        val s =
+          s"""
+             |import numpy as np
+             |i1 = np.ones([32, 3, 224, 224])
+             |o1 = np.ones([32, 1])
+             |data = (torch.Tensor(i1), torch.Tensor(o1).flatten().long())
+             |""".stripMargin
+        jep.exec(s)
+        val start = System.nanoTime()
+        model.forward(Tensor[Float]())
+        println(s"${i} time cost: ${(System.nanoTime() - start) / 1e9}")
+        model.backward(Tensor[Float](), Tensor[Float]())
+        println(s"${i} total cost: ${(System.nanoTime() - start) / 1e9}")
+      }
+      Iterator.single(1)
+    }.count()
   }
 
   def estimatorTest(): Double = {

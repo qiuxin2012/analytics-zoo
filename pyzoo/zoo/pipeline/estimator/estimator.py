@@ -48,6 +48,10 @@ class Estimator(JavaValue):
         callZooFunc(bigdl_type, "estimatorTest")
 
     @staticmethod
+    def test2(model, bigdl_type="float"):
+        callZooFunc(bigdl_type, "estimatorTest2", model.value)
+
+    @staticmethod
     def print(bigdl_type="float"):
         callZooFunc(bigdl_type, "printOmpThread")
 
