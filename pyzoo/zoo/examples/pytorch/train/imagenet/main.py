@@ -23,10 +23,10 @@ model_names = sorted(name for name in torchvision.models.__dict__
 
 def main():
     # sc = init_nncontext()
-    sc = init_spark_on_local(cores=16, conf={"spark.driver.memory": "10g"})
+    sc = init_spark_on_local(cores=8, conf={"spark.driver.memory": "20g"})
     #hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
-    #num_executors = 1
-    #num_cores_per_executor = 16
+    #num_executors = 2
+    #num_cores_per_executor = 4
     #sc = init_spark_on_yarn(
     #    hadoop_conf=hadoop_conf_dir,
     #    conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
@@ -38,16 +38,18 @@ def main():
     #    spark_conf={"spark.rpc.message.maxSize": "1024",
     #                "spark.task.maxFailures":  "1",
     #                "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
-    # import time
-    # s = time.time()
-    # Estimator.test()
-    # print("test 1: " + str(time.time() - s))
-    # Estimator.test()
-    # print("test 2: " + str(time.time() - s))
-    # Estimator.test()
-    # print("test 3: " + str(time.time() - s))
-    # Estimator.test()
-    # print("test 4: " + str(time.time() - s))
+    import time
+    s = time.time()
+    Estimator.print()
+    #Estimator.test()
+    print("test 1: " + str(time.time() - s))    
+    #Estimator.print()
+    ##Estimator.test()
+    ##print("test 2: " + str(time.time() - s))    
+    ##Estimator.test()
+    ##print("test 3: " + str(time.time() - s))    
+    ##Estimator.test()
+    ##print("test 4: " + str(time.time() - s))    
     # Training settings
     parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
     parser.add_argument('data', metavar='DIR',
@@ -120,12 +122,12 @@ def main():
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=1)
 
-    train_featureSet = FeatureSet.data_loader(train_loader)
     model = torchvision.models.resnet50()
     model.train()
-    adam = Adam()
-    zooModel = TorchNet2.from_pytorch(model)
-    train_featureSet.next(zooModel)
+    #adam = Adam()
+    #zooModel = TorchNet2.from_pytorch(model)
+    #Estimator.test3(model)
+    #Estimator.test4(model)
 
     val_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(valdir, transforms.Compose([
@@ -133,44 +135,44 @@ def main():
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             normalize,
-            ])),
-            batch_size=args.batch_size, shuffle=False,
-            num_workers=args.workers, pin_memory=True)
+        ])),
+        batch_size=args.batch_size, shuffle=False,
+        num_workers=args.workers, pin_memory=True)
 
     model = torchvision.models.resnet50()
-    #criterion = nn.CrossEntropyLoss()
-    #import time
-    #for i, (images, target) in enumerate(train_loader):
-    #    s = time.time()
-    #    output = model(images)
-    #    loss = criterion(output, target)
-    #    print(str(i) + ": " + str(loss.data.item()) + " " + str(time.time() - s))
+   #criterion = nn.CrossEntropyLoss()
+   #import time
+   #for i, (images, target) in enumerate(train_loader):
+   #    s = time.time()
+   #    output = model(images)
+   #    loss = criterion(output, target)
+   #    print(str(i) + ": " + str(loss.data.item()) + " " + str(time.time() - s))
 
-    # optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
+   # optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
-    #num_executors = 1
-    #num_cores_per_executor = 4
-    #hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
-    #sc = init_nncontext(conf={"spark.driver.memory": "10g"})
-    #from pyspark.conf import SparkConf
-    # spark_conf = SparkConf().setMaster("local[16]").setAppName("resnet") \
-    #              .set("spark.driver.memory", "10g") \
-    #              .set("spark.rpc.message.maxSize", "1024") \
-    #              .setExecutorEnv("OMP_NUM_THREADS", "16")
-    # spark_conf = {"spark.driver.memory": "10g", "spark.rpc.message.maxSize": "1024"}
-    #sc = init_nncontext()
-    #sc = init_spark_on_local(cores=16, conf={"spark.driver.memory": "10g"})
-    #sc = init_spark_on_yarn(
-    #    hadoop_conf=hadoop_conf_dir,
-    #    conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
-    #    num_executor=num_executors,
-    #    executor_cores=num_cores_per_executor,
-    #    executor_memory="10g",
-    #    driver_memory="10g",
-    #    driver_cores=1,
-    #    spark_conf={"spark.rpc.message.maxSize": "1024",
-    #                "spark.task.maxFailures":  "1",
-    #                "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
+   #num_executors = 1
+   #num_cores_per_executor = 4
+   #hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
+   #sc = init_nncontext(conf={"spark.driver.memory": "10g"})
+   #from pyspark.conf import SparkConf
+   # spark_conf = SparkConf().setMaster("local[16]").setAppName("resnet") \
+   #              .set("spark.driver.memory", "10g") \
+   #              .set("spark.rpc.message.maxSize", "1024") \
+   #              .setExecutorEnv("OMP_NUM_THREADS", "16")
+   # spark_conf = {"spark.driver.memory": "10g", "spark.rpc.message.maxSize": "1024"}
+   #sc = init_nncontext()
+   #sc = init_spark_on_local(cores=16, conf={"spark.driver.memory": "10g"})
+   #sc = init_spark_on_yarn(
+   #    hadoop_conf=hadoop_conf_dir,
+   #    conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
+   #    num_executor=num_executors,
+   #    executor_cores=num_cores_per_executor,
+   #    executor_memory="10g",
+   #    driver_memory="10g",
+   #    driver_cores=1,
+   #    spark_conf={"spark.rpc.message.maxSize": "1024",
+   #                "spark.task.maxFailures":  "1",
+   #                "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
     model.train()
     adam = Adam()
     zooModel = TorchNet2.from_pytorch(model)
@@ -191,10 +193,11 @@ def main():
     c = train_featureSet.to_dataset().size()
     print(c)
     # estimator.evaluate_minibatch(train_featureSet, [Accuracy()])
-    from bigdl.optim.optimizer import MaxEpoch, EveryEpoch
+    from bigdl.optim.optimizer import MaxEpoch, EveryEpoch, MaxIteration
     from zoo.pipeline.api.keras.metrics import Accuracy
     estimator.train_minibatch(train_featureSet, zooCriterion, end_trigger=MaxEpoch(3), checkpoint_trigger=EveryEpoch(),
                               validation_set=test_featureSet, validation_method=[Accuracy()])
+    Estimator.print()
 
 if __name__ == '__main__':
     main()

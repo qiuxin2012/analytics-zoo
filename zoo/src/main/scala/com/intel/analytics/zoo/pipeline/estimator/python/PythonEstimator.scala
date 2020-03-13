@@ -26,8 +26,11 @@ import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.transform.vision.image.{ImageFeature, ImageFeatureToMiniBatch}
 import com.intel.analytics.bigdl.utils.Table
+import com.intel.analytics.bigdl.mkl.MKL
+import com.intel.analytics.bigdl.python.api.JTensor
 import com.intel.analytics.zoo.common.PythonZoo
 import com.intel.analytics.zoo.feature.{FeatureSet, PythonLoaderFeatureSet}
+import com.intel.analytics.zoo.pipeline.api.net.{TorchNet2, TorchNet2Broadcast}
 import com.intel.analytics.zoo.pipeline.estimator.Estimator
 import jep.{JepConfig, NamingConventionClassEnquirer, SharedInterpreter}
 import org.apache.spark.SparkContext
@@ -136,23 +139,85 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
            |""".stripMargin
       c.exec(str)
       val v = c.getValue("os.environ['OMP_NUM_THREADS']").asInstanceOf[String]
-      println(v)
+      val envs = c.getValue("os.environ")
+      println("omp num threads in jep is " + v)
+      println(envs)
+      println("current mkl threads is " + MKL.getNumThreads())
       Iterator.single(v)
     }.reduce(_ + _)
 
   }
 
   // TODO: delete test code
-  def estimatorTest2(model: Module[T]): Unit = {
+  def estimatorTest4(model: Array[Byte], weights: JTensor): Unit = {
     val sc = SparkContext.getOrCreate()
-    val bcModel = ModelBroadcast().broadcast(sc, model)
-    sc.range(1, 10, 1).mapPartitions{iter =>
+    val m = TorchNet2(model, weights.storage).asInstanceOf[Module[T]]
+    val bcModel = TorchNet2Broadcast().broadcast(sc, m)
+    sc.range(1, 10, 1, 1).mapPartitions{iter =>
       val model = bcModel.value(true)
       (0 to 32).foreach{i =>
         val jep = PythonLoaderFeatureSet.getOrCreateInterpreter()
         val s =
           s"""
              |import numpy as np
+             |import torch
+             |i1 = np.ones([32, 3, 224, 224])
+             |o1 = np.ones([32, 1])
+             |data = (torch.Tensor(i1), torch.Tensor(o1).flatten().long())
+             |""".stripMargin
+        jep.exec(s)
+        val start = System.nanoTime()
+        model.forward(Tensor[Float]())
+        println(s"${i} time cost: ${(System.nanoTime() - start) / 1e9}")
+        model.backward(Tensor[Float](), Tensor[Float]())
+        println(s"${i} total cost: ${(System.nanoTime() - start) / 1e9}")
+      }
+      Iterator.single(1)
+    }.count()
+  }
+
+  // TODO: delete test code
+  def estimatorTest3(model: Array[Byte], weights: JTensor): Unit = {
+    val sc = SparkContext.getOrCreate()
+//    val bcModel = ModelBroadcast().broadcast(sc, model)
+    val bcModel = sc.broadcast(model)
+    val bcWeights = sc.broadcast(weights)
+    sc.range(1, 10, 1, 1).mapPartitions{iter =>
+      val model = TorchNet2(bcModel.value, bcWeights.value.storage)
+      (0 to 32).foreach{i =>
+        val jep = PythonLoaderFeatureSet.getOrCreateInterpreter()
+        val s =
+          s"""
+             |import numpy as np
+             |import torch
+             |i1 = np.ones([32, 3, 224, 224])
+             |o1 = np.ones([32, 1])
+             |data = (torch.Tensor(i1), torch.Tensor(o1).flatten().long())
+             |""".stripMargin
+        jep.exec(s)
+        val start = System.nanoTime()
+        model.forward(Tensor[Float]())
+        println(s"${i} time cost: ${(System.nanoTime() - start) / 1e9}")
+        model.backward(Tensor[Float](), Tensor[Float]())
+        println(s"${i} total cost: ${(System.nanoTime() - start) / 1e9}")
+      }
+      Iterator.single(1)
+    }.count()
+  }
+
+  // TODO: delete test code
+  def estimatorTest2(model: Module[T]): Unit = {
+    val sc = SparkContext.getOrCreate()
+    val bcModel = ModelBroadcast().broadcast(sc, model)
+    sc.range(1, 10, 1, 1).mapPartitions{iter =>
+      System.setProperty("bigdl.mklNumThreads", "18")
+      val model = bcModel.value(true)
+      (0 to 32).foreach{i =>
+        val jep = PythonLoaderFeatureSet.getOrCreateInterpreter()
+        val s =
+          s"""
+             |import numpy as np
+             |import torch
              |i1 = np.ones([32, 3, 224, 224])
              |o1 = np.ones([32, 1])
              |data = (torch.Tensor(i1), torch.Tensor(o1).flatten().long())
@@ -206,8 +271,9 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
            |    s = time.time()
            |    output = model(images)
            |    loss = criterion(output, target)
+           |    print(str(i) + " forward: " + str(time.time() - s))
            |    loss.backward()
-           |    print(str(i) + ": " + str(loss.data.item()) + " " + str(time.time() - s))
+           |    print(str(i) + " total: " + str(time.time() - s))
            |""".stripMargin
       val start = System.nanoTime()
       c.exec(str)

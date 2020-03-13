@@ -137,7 +137,6 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
                      |    return tuple([tensor_to_numpy(d) for d in data])
                      |
                      |import torch
-                     |torch.set_num_threads(16)
                      |
                      |""".stripMargin
 
@@ -168,10 +167,14 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
     val bcModel = ModelBroadcast().broadcast(dataset.sparkContext, model)
     dataset.mapPartitions{iter =>
       val model = bcModel.value(true)
+      var i = 0
       while(iter.hasNext) {
         iter.next()
+        val start = System.nanoTime()
         model.forward(Tensor[Float]())
+        println(s"$i forward cost ${(System.nanoTime() - start) / 1e9}s")
         model.backward(Tensor[Float](), Tensor[Float]())
+        println(s"$i total cost ${(System.nanoTime() - start) / 1e9}s")
       }
       Iterator.single(1)
     }.count()

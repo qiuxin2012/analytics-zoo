@@ -415,7 +415,6 @@ object PythonLoaderFeatureSet{
                |import tensorflow as tf
                |tf.compat.v1.set_random_seed(${1000})
                |import os
-               |os.environ['OMP_NUM_THREADS']='4'
                |""".stripMargin
           sharedInterpreter.exec(str)
         }

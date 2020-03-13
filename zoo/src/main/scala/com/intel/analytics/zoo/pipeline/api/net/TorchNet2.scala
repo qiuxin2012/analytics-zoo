@@ -21,8 +21,9 @@ import java.nio.file.{Files, Paths}
 import java.util.UUID
 
 import com.intel.analytics.bigdl.Module
+import com.intel.analytics.bigdl.models.utils.{ModelBroadcast, ModelBroadcastFactory, ModelBroadcastImp}
 import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, Activity}
-import com.intel.analytics.bigdl.tensor.{Storage, Tensor}
+import com.intel.analytics.bigdl.tensor.{QuantizedTensor, QuantizedType, Storage, Tensor}
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.utils.T
 import com.intel.analytics.zoo.feature.PythonLoaderFeatureSet
@@ -30,6 +31,8 @@ import com.intel.analytics.zoo.pipeline.api.Predictable
 import com.intel.analytics.zoo.pipeline.api.net.TorchNet2.TorchModelHolder2
 import jep.{Jep, NDArray}
 import org.apache.commons.io.FileUtils
+import org.apache.spark.SparkContext
+import org.apache.spark.broadcast.Broadcast
 import org.slf4j.LoggerFactory
 
 import scala.reflect.ClassTag
@@ -48,8 +51,25 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
          |import torch.nn.functional as F
          |import torchvision
          |by = bytes(b % 256 for b in model_bytes)
+         |def tensor_to_numpy(elements):
+         |    if isinstance(elements, np.ndarray):
+         |        return elements
+         |    elif isinstance(elements, list):
+         |        return tensor_to_list_of_numpy(elements)
+         |    elif isinstance(elements, str):
+         |        return elements
+         |    else:
+         |        return elements.numpy()
+         |    results = []
+         |    for element in elements:
+         |        results += tensor_to_list_of_numpy(element)
+         |    return results
+         |
+         |def tuple_to_numpy(data):
+         |    return tuple([tensor_to_numpy(d) for d in data])
+         |
+         |from pyspark.serializers import CloudPickleSerializer
          |${getName()} = CloudPickleSerializer.loads(CloudPickleSerializer, by)
-         |${getName()} = torchvision.models.resnet50()
          |criterion = nn.CrossEntropyLoss()
          |""".stripMargin
     println(Thread.currentThread())
@@ -193,5 +213,150 @@ object TorchNet2 {
 
   def apply(modelBytes: Array[Byte], weights: Array[Float]): TorchNet2 = {
     new TorchNet2(new TorchModelHolder2(modelBytes, UUID.randomUUID().toString), weights)
+  }
+}
+
+/**
+ * ModelBroadcast is used to broadcast model.
+ *
+ * Note: If you want to use this to broadcast training model, please use value(true) to get
+ * the model. And before broadcasting please make sure the model's parameter is compacted.
+ *
+ * @tparam T data type
+ */
+class TorchNet2Broadcast[T: ClassTag]()(implicit ev: TensorNumeric[T]) extends ModelBroadcast[T] {
+  // TODO:
+  println("----------create TorchNet2 Broadcast")
+
+  private var broadcastModel: Broadcast[Module[T]] = _
+  private var broadcastParameters: Broadcast[Array[Tensor[T]]] = _
+
+  /**
+   * broadcast the model
+   * first get and clear the weight and bias parameters from the model
+   * then broadcast the parameters and model(without parameters) separately
+   * @param sc    SparkContext
+   * @param model model to broadcast
+   * @return this
+   */
+  override def broadcast(sc: SparkContext, model: Module[T]): this.type = {
+    val weightsBias = getAndClearWeightBias(model.parameters())
+    broadcastModel = sc.broadcast(model.cloneModule())
+    broadcastParameters = sc.broadcast(weightsBias)
+    putWeightBias(weightsBias, model)
+    initGradWeightBias(weightsBias, model)
+    this
+  }
+
+  /**
+   * get the broadcast model
+   * put the weight and bias back to the model
+   *
+   * @param initGradient if init gradParameter.
+   * @return model
+   */
+  override def value(initGradient: Boolean = false, shareWeight: Boolean = true): Module[T] = {
+    val localModel = broadcastModel.value.cloneModule()
+    putWeightBias(broadcastParameters.value, localModel)
+    if (initGradient) {
+      initGradWeightBias(broadcastParameters.value, localModel)
+    }
+    localModel
+  }
+
+
+  private def getAndClearWeightBias(parameters: (Array[Tensor[T]], Array[Tensor[T]]))
+  : Array[Tensor[T]] = {
+    if (parameters._1.length != 0) {
+      var i = 0
+      val weightsBias = new Array[Tensor[T]](parameters._1.length)
+      val isQuantized = parameters._1.exists(_.getTensorType == QuantizedType)
+      val (isCompacted, storage) = if (!isQuantized) {
+        val storage = Storage(parameters._1(0).storage.array())
+        (parameters._1.map(_.nElement()).sum == storage.length(), storage)
+      } else {
+        (false, null)
+      }
+
+      // get weight and bias
+      while (i < parameters._1.length) {
+        if (parameters._1(i) != null) {
+          val wb = parameters._1(i)
+          weightsBias(i) = if (isCompacted) {
+            Tensor[T](storage, wb.storageOffset(), wb.size(), wb.stride())
+          } else {
+            Tensor[T](Storage(wb.storage().array()), wb.storageOffset(), wb.size(), wb.stride())
+          }
+          i += 1
+        }
+      }
+      // clear parameters
+      clearTensor(parameters._1)
+      clearTensor(parameters._2)
+
+      weightsBias
+    } else {
+      // just return an empty array when parameters is empty.
+      Array()
+    }
+  }
+
+  private def clearTensor(tensors: Array[Tensor[T]]): Unit = {
+    var i = 0
+    while (i < tensors.length) {
+      if (tensors(i) != null) {
+        tensors(i).set()
+      }
+      i += 1
+    }
+  }
+
+  private def putWeightBias(
+                               broadcastWeightBias: Array[Tensor[T]],
+                               localModel: Module[T]): Unit = {
+    val localWeightBias = localModel.parameters()._1
+    var i = 0
+    while (i < localWeightBias.length) {
+      if (localWeightBias(i) != null) {
+        localWeightBias(i).set(broadcastWeightBias(i))
+      }
+      i += 1
+    }
+  }
+
+  private def initGradWeightBias(
+                                    broadcastWeightBias: Array[Tensor[T]],
+                                    localModel: Module[T]): Unit = {
+    val (localWeightBias, localGradWeightBias) = localModel.parameters()
+    // init gradient with a compacted storage
+    val storage = Storage[T](localGradWeightBias.map(_.nElement()).sum)
+    val isQuantized = broadcastWeightBias.exists(_.getTensorType == QuantizedType)
+    var i = 0
+    while (i < localWeightBias.length) {
+      if (localWeightBias(i) != null) {
+        val wb = broadcastWeightBias(i)
+        wb.getTensorType match {
+          case QuantizedType =>
+            localGradWeightBias(i).set(Tensor(1))
+          case _ =>
+            localGradWeightBias(i).set(storage, wb.storageOffset(), wb.size(), wb.stride())
+        }
+      }
+      i += 1
+    }
+  }
+}
+
+
+object TorchNet2Broadcast {
+  def apply[@specialized(Float, Double) T: ClassTag]()
+        (implicit ev: TensorNumeric[T]) : ModelBroadcast[T] = {
+    new TorchNet2Broadcast[T]()
+  }
+}
+
+class TorchNet2BroadcastFactory extends ModelBroadcastFactory {
+  override def create[T: ClassTag]()(implicit ev: TensorNumeric[T]): ModelBroadcast[T] = {
+    TorchNet2Broadcast()
   }
 }

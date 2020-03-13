@@ -52,6 +52,32 @@ class Estimator(JavaValue):
         callZooFunc(bigdl_type, "estimatorTest2", model.value)
 
     @staticmethod
+    def test3(model, bigdl_type="float"):
+        import torch
+        from bigdl.util.common import JTensor
+        weights=[]
+        for param in model.parameters():
+            weights.append(param.view(-1))
+        flatten_weight = torch.nn.utils.parameters_to_vector(weights).data.numpy()
+        from pyspark.serializers import CloudPickleSerializer
+        bys = CloudPickleSerializer.dumps(CloudPickleSerializer, model)
+        weights = JTensor.from_ndarray(flatten_weight)
+        callZooFunc(bigdl_type, "estimatorTest3", bys, weights)
+
+    @staticmethod
+    def test4(model, bigdl_type="float"):
+        import torch
+        from bigdl.util.common import JTensor
+        weights=[]
+        for param in model.parameters():
+            weights.append(param.view(-1))
+        flatten_weight = torch.nn.utils.parameters_to_vector(weights).data.numpy()
+        from pyspark.serializers import CloudPickleSerializer
+        bys = CloudPickleSerializer.dumps(CloudPickleSerializer, model)
+        weights = JTensor.from_ndarray(flatten_weight)
+        callZooFunc(bigdl_type, "estimatorTest4", bys, weights)
+
+    @staticmethod
     def print(bigdl_type="float"):
         callZooFunc(bigdl_type, "printOmpThread")
 
