@@ -24,19 +24,16 @@ object PythonInterpreter {
         SharedInterpreter.setConfig(config)
         println("Create jep on thread: " + Thread.currentThread())
         val sharedInterpreter = new SharedInterpreter()
-        val str =
-          s"""
-             |import tensorflow as tf
-             |tf.compat.v1.set_random_seed(${1000})
-             |import os
-             |""".stripMargin
-        sharedInterpreter.exec(str)
         sharedInterpreter
       } catch {
         case e: Exception =>
           println(e)
-          println("retry to create interpreter")
-          val sharedInterpreter = new SharedInterpreter()
+          throw e
+      }
+    if (sharedInterpreter == null) {
+      synchronized{
+        if (sharedInterpreter == null) {
+          sharedInterpreter = threadExecute(createInterp)
           val str =
             s"""
                |import tensorflow as tf
@@ -44,12 +41,6 @@ object PythonInterpreter {
                |import os
                |""".stripMargin
           sharedInterpreter.exec(str)
-          sharedInterpreter
-      }
-    if (sharedInterpreter == null) {
-      synchronized{
-        if (sharedInterpreter == null) {
-          sharedInterpreter = threadExecute(createInterp)
         }
       }
     }
