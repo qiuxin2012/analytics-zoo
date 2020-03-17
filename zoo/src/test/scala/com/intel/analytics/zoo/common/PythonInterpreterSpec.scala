@@ -10,11 +10,14 @@ class PythonInterpreterSpec extends ZooSpecHelper{
     (0 until 1).toParArray.foreach{i =>
       PythonInterpreter.exec("np.array([1, 2, 3])")
     }
-    val sc = new SparkContext(new SparkConf().setAppName("app").setMaster("local[1]"))
-    sc.parallelize(0 to 10, 1).mapPartitions(i => {
-      PythonInterpreter.exec("a = np.array([1, 2, 3])")
-      i
-    }).count()
+    val sc = new SparkContext(new SparkConf().setAppName("app").setMaster("local[4]"))
+    (0 to 10).foreach(i =>
+      sc.parallelize(0 to 10, 1).mapPartitions(i => {
+        println(Thread.currentThread())
+        PythonInterpreter.exec("a = np.array([1, 2, 3])")
+        i
+      }).count()
+    )
     println(PythonInterpreter.getValue[NDArray[_]]("a").getData())
   }
 

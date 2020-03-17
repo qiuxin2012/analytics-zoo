@@ -9,7 +9,8 @@ object PythonInterpreter {
 
   private val thread = new ThreadPool(1)
   private val parThread = Array(0).par
-  val sharedInterpreter: SharedInterpreter = createInterpreter()
+  var sharedInterpreter: SharedInterpreter = null
+  createInterpreter()
   private def createInterpreter(): SharedInterpreter = {
     val createInterp = () =>
       try {
@@ -40,7 +41,14 @@ object PythonInterpreter {
           sharedInterpreter.exec(str)
           sharedInterpreter
       }
-    threadExecute(createInterp)
+    if (sharedInterpreter == null) {
+      synchronized{
+        if (sharedInterpreter == null) {
+          sharedInterpreter = threadExecute(createInterp)
+        }
+      }
+    }
+    sharedInterpreter
   }
 
   private def threadExecute[T: ClassTag](task: () => T): T = {
