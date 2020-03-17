@@ -23,6 +23,7 @@ import com.intel.analytics.bigdl.DataSet
 import com.intel.analytics.bigdl.dataset.{AbstractDataSet, DistributedDataSet, MiniBatch, Transformer}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.utils.RandomGenerator
+import com.intel.analytics.zoo.common.PythonInterpreter
 import com.intel.analytics.zoo.core.TFNetNative
 import com.intel.analytics.zoo.feature.common.{ArrayLike, ArrayLikeWrapper}
 import com.intel.analytics.zoo.feature.pmem._
@@ -353,8 +354,8 @@ object PythonLoaderFeatureSet{
       val partId = TaskContext.getPartitionId()
       require(partId < nodeNumber, s"partId($partId) should be" +
         s" smaller than nodeNumber(${nodeNumber})")
-      interp.exec(preimports)
-      interp.set("pyjarray", bcDataSet.value)
+      PythonInterpreter.exec(preimports)
+      PythonInterpreter.set("pyjarray", bcDataSet.value)
 
       val load = s"""
         |by${partId} = bytes(b % 256 for b in pyjarray)
@@ -365,7 +366,7 @@ object PythonLoaderFeatureSet{
         |  ${getLocalLoader(loaderName)} = func${partId}
         |""".stripMargin
 
-      interp.exec(load)
+      PythonInterpreter.exec(load)
       Iterator.single(interp)
     }.count()
 
@@ -388,10 +389,10 @@ object PythonLoaderFeatureSet{
           originRdd.count()
           originRdd.mapPartitions{
             _ => TFNetNative.isLoaded
-            Iterator.single(1)
+              Iterator.single(1)
           }.count()
           jepRDD = originRdd.mapPartitions { iter =>
-            val interp = getOrCreateInterpreter()
+            val interp = PythonInterpreter.sharedInterpreter
             Iterator.single(interp)
           }.setName("SharedInterpRDD").cache()
           jepRDD.count()
@@ -401,31 +402,31 @@ object PythonLoaderFeatureSet{
     jepRDD
   }
 
-  private var sharedInterpreter: SharedInterpreter = null
-  private[zoo] def getOrCreateInterpreter(): SharedInterpreter = {
-    if (sharedInterpreter == null) {
-      try {
-        if (sharedInterpreter == null) {
-          val config: JepConfig = new JepConfig()
-          config.setClassEnquirer(new NamingConventionClassEnquirer())
-          SharedInterpreter.setConfig(config)
-          sharedInterpreter = new SharedInterpreter()
-          val str =
-            s"""
-               |import tensorflow as tf
-               |tf.compat.v1.set_random_seed(${1000})
-               |import os
-               |""".stripMargin
-          sharedInterpreter.exec(str)
-        }
-      } catch {
-        case e: Exception =>
-          println(e)
-      
-      }
-    }
-    sharedInterpreter
-  }
+//  private var sharedInterpreter: SharedInterpreter = null
+//  private[zoo] def getOrCreateInterpreter(): SharedInterpreter = {
+//    if (sharedInterpreter == null) {
+//      try {
+//        if (sharedInterpreter == null) {
+//          val config: JepConfig = new JepConfig()
+//          config.setClassEnquirer(new NamingConventionClassEnquirer())
+//          SharedInterpreter.setConfig(config)
+//          sharedInterpreter = new SharedInterpreter()
+//          val str =
+//            s"""
+//               |import tensorflow as tf
+//               |tf.compat.v1.set_random_seed(${1000})
+//               |import os
+//               |""".stripMargin
+//          sharedInterpreter.exec(str)
+//        }
+//      } catch {
+//        case e: Exception =>
+//          println(e)
+//
+//      }
+//    }
+//    sharedInterpreter
+//  }
 
   protected def toArrayTensor(
         data: AnyRef): Array[Tensor[Float]] = {
@@ -498,28 +499,28 @@ class PythonLoaderFeatureSet[T: ClassTag](
 
           override def next(): T = {
             try {
-              interp.exec(nextCode)
+              PythonInterpreter.exec(nextCode)
             } catch {
               case e: Exception =>
                 if (e.getMessage().contains("End of sequence") ||
                   e.getMessage().contains("StopIteration") ||
                   e.getMessage().contains("is not defined")) {
-                  interp.exec(getIteratorCode)
-                  interp.exec(nextCode)
+                  PythonInterpreter.exec(getIteratorCode)
+                  PythonInterpreter.exec(nextCode)
                 } else {
                   throw e
                 }
             }
             val inputs = if (inputName != "") {
-              toArrayTensor(interp.getValue(inputName))
+              toArrayTensor(PythonInterpreter.getValue[AnyRef](inputName))
             } else {
               // TODO: find true size
-              val batchSize = interp.getValue(s"${localLoaderName}.batch_size")
+              val batchSize = PythonInterpreter.getValue(s"${localLoaderName}.batch_size")
                   .asInstanceOf[Long].toInt
               Array(Tensor[Float](batchSize))
             }
             val miniBatch = if (targetName != "") {
-              val targets = toArrayTensor(interp.getValue(targetName))
+              val targets = toArrayTensor(PythonInterpreter.getValue(targetName))
               MiniBatch[Float](inputs, targets)
             } else {
               MiniBatch[Float](inputs)
@@ -533,7 +534,7 @@ class PythonLoaderFeatureSet[T: ClassTag](
         val interp = dataIter.next()
         val localLoaderName = getLocalLoader(loaderName)
         val localIterName = getLocalIter(localLoaderName, train)
-        interp.exec(getIterator(localIterName, localLoaderName))
+        PythonInterpreter.exec(getIterator(localIterName, localLoaderName))
         new Iterator[T] {
           val nextCode = getNext(localIterName)
           var alreadyNext = false
@@ -541,7 +542,7 @@ class PythonLoaderFeatureSet[T: ClassTag](
           override def hasNext: Boolean = {
               if (!alreadyNext) {
                 try {
-                  interp.exec(nextCode)
+                  PythonInterpreter.exec(nextCode)
                 } catch {
                   case e: Exception =>
                     if (e.getMessage().contains("End of sequence") ||
@@ -558,18 +559,18 @@ class PythonLoaderFeatureSet[T: ClassTag](
 
           override def next(): T = {
             if (!alreadyNext) {
-              interp.exec(nextCode)
+              PythonInterpreter.exec(nextCode)
             }
             val inputs = if (inputName != "") {
-              toArrayTensor(interp.getValue(inputName))
+              toArrayTensor(PythonInterpreter.getValue(inputName))
             } else {
               // TODO: find true size
-              val batchSize = interp.getValue(s"${localLoaderName}.batch_size")
+              val batchSize = PythonInterpreter.getValue(s"${localLoaderName}.batch_size")
                 .asInstanceOf[Long].toInt
               Array(Tensor[Float](batchSize))
             }
             val miniBatch = if (targetName != "") {
-              val targets = toArrayTensor(interp.getValue(targetName))
+              val targets = toArrayTensor(PythonInterpreter.getValue(targetName))
               MiniBatch[Float](inputs, targets)
             } else {
               MiniBatch[Float](inputs)

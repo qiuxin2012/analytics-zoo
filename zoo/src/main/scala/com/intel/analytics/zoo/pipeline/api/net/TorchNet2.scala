@@ -26,6 +26,7 @@ import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, Activity}
 import com.intel.analytics.bigdl.tensor.{QuantizedTensor, QuantizedType, Storage, Tensor}
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.utils.T
+import com.intel.analytics.zoo.common.PythonInterpreter
 import com.intel.analytics.zoo.feature.PythonLoaderFeatureSet
 import com.intel.analytics.zoo.pipeline.api.Predictable
 import com.intel.analytics.zoo.pipeline.api.net.TorchNet2.TorchModelHolder2
@@ -43,7 +44,7 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
 
   protected lazy val loaded = {
     println(Thread.currentThread())
-    sharedJep.set("model_bytes", modelHolder.torchBytes)
+    PythonInterpreter.set("model_bytes", modelHolder.torchBytes)
     val loadModelCode =
       s"""
          |import torch
@@ -73,7 +74,7 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
          |criterion = nn.CrossEntropyLoss()
          |""".stripMargin
     println(Thread.currentThread())
-    sharedJep.exec(loadModelCode)
+    PythonInterpreter.exec(loadModelCode)
     true
   }
 
@@ -104,7 +105,7 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
     println(Thread.currentThread())
     val startTime = System.nanoTime()
     val forwardCode = if (train) {
-      sharedJep.set("newWeight", weights.storage().array())
+      PythonInterpreter.set("newWeight", weights.storage().array())
       println("weights sum" + weights.sum())
       setWeightCode +
         this.forwardCode +
@@ -113,9 +114,9 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
       this.forwardCode
     }
     println(Thread.currentThread())
-    sharedJep.exec(forwardCode)
+    PythonInterpreter.exec(forwardCode)
     println(s"run forward cost: ${(System.nanoTime() - startTime) / 1e9}")
-    val outputNd = sharedJep.getValue("tensor_to_numpy(output.data.numpy())").asInstanceOf[NDArray[_]]
+    val outputNd = PythonInterpreter.getValue[NDArray[_]]("tensor_to_numpy(output.data.numpy())")
     output = PythonLoaderFeatureSet.ndArrayToTensor(outputNd)
     println(s"forward total cost: ${(System.nanoTime() - startTime) / 1e9}")
     output
@@ -133,12 +134,12 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
         |grad=torch.nn.utils.parameters_to_vector(grads)
         |""".stripMargin
     println(Thread.currentThread())
-    sharedJep.exec(backwardCode)
+    PythonInterpreter.exec(backwardCode)
     println(s"run backward cost: ${(System.nanoTime() - startTime) / 1e9}")
     // TODO: just do a copy
-    val gradSum = sharedJep.getValue("grad.data.numpy().sum()").asInstanceOf[Float]
+    val gradSum = PythonInterpreter.getValue("grad.data.numpy().sum()").asInstanceOf[Float]
     val grad = PythonLoaderFeatureSet.ndArrayToTensor(
-      sharedJep.getValue("grad.data.numpy()").asInstanceOf[NDArray[_]])
+      PythonInterpreter.getValue("grad.data.numpy()").asInstanceOf[NDArray[_]])
     println("gradients sum: " + grad.sum() + ", while python side: " + gradSum)
     gradients.copy(grad)
     println(s"backward total cost: ${(System.nanoTime() - startTime) / 1e9}")
@@ -152,7 +153,7 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
         |    param.grad.fill_(0)
         |""".stripMargin
     println(Thread.currentThread())
-    sharedJep.exec(zeroGradCode)
+    PythonInterpreter.exec(zeroGradCode)
     super.zeroGradParameters()
   }
 
@@ -165,7 +166,6 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
 
 object TorchNet2 {
   private val modelBytesRegistry = new RegistryMap[Array[Byte]]()
-  private[zoo] lazy val sharedJep = PythonLoaderFeatureSet.getOrCreateInterpreter()
 
   @transient
   private lazy val inDriver = NetUtils.isDriver

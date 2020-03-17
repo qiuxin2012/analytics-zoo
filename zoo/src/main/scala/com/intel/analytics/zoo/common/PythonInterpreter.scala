@@ -1,0 +1,78 @@
+package com.intel.analytics.zoo.common
+
+import com.intel.analytics.bigdl.utils.ThreadPool
+import jep.{JepConfig, NamingConventionClassEnquirer, SharedInterpreter}
+
+import scala.reflect.ClassTag
+
+object PythonInterpreter {
+
+  private val thread = new ThreadPool(1)
+  private val parThread = Array(0).par
+  val sharedInterpreter: SharedInterpreter = createInterpreter()
+  private def createInterpreter(): SharedInterpreter = {
+    val createInterp = () =>
+      try {
+        val config: JepConfig = new JepConfig()
+        config.setClassEnquirer(new NamingConventionClassEnquirer())
+        SharedInterpreter.setConfig(config)
+        println("Create jep on thread: " + Thread.currentThread())
+        val sharedInterpreter = new SharedInterpreter()
+        val str =
+          s"""
+             |import tensorflow as tf
+             |tf.compat.v1.set_random_seed(${1000})
+             |import os
+             |""".stripMargin
+        sharedInterpreter.exec(str)
+        sharedInterpreter
+      } catch {
+        case e: Exception =>
+          println(e)
+          println("retry to create interpreter")
+          val sharedInterpreter = new SharedInterpreter()
+          val str =
+            s"""
+               |import tensorflow as tf
+               |tf.compat.v1.set_random_seed(${1000})
+               |import os
+               |""".stripMargin
+          sharedInterpreter.exec(str)
+          sharedInterpreter
+      }
+    threadExecute(createInterp)
+  }
+
+  private def threadExecute[T: ClassTag](task: () => T): T = {
+//    thread.invokeAndWait(Array(0).map(i => task
+//    ))(0)
+    val result = parThread.map { i =>
+      task()
+    }
+    result.apply(0)
+  }
+
+  def exec(s: String): Unit = {
+    val func = () => {
+      println("jep exec on thread: " + Thread.currentThread())
+      sharedInterpreter.exec(s)
+    }
+    threadExecute(func)
+  }
+
+  def set(s: String, o: AnyRef): Unit = {
+    val func = () => {
+      println("jep set on thread: " + Thread.currentThread())
+      sharedInterpreter.set(s, o)
+    }
+    threadExecute(func)
+  }
+
+  def getValue[T](name: String): T = {
+    val func = () => {
+      println("jep getValue on thread: " + Thread.currentThread())
+      sharedInterpreter.getValue(name)
+    }
+    threadExecute(func).asInstanceOf[T]
+  }
+}

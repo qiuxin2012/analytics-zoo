@@ -17,6 +17,7 @@ package com.intel.analytics.zoo.pipeline.api.net
 
 import com.intel.analytics.bigdl.nn.abstractnn.{AbstractCriterion, Activity}
 import com.intel.analytics.bigdl.tensor.Tensor
+import com.intel.analytics.zoo.common.PythonInterpreter
 import com.intel.analytics.zoo.feature.PythonLoaderFeatureSet
 
 
@@ -25,7 +26,7 @@ class TorchCriterion2 extends AbstractCriterion[Activity, Activity, Float]() {
 
   override def updateOutput(input: Activity, target: Activity): Float = {
     println(Thread.currentThread())
-    output = sharedJep.getValue("loss.item()").asInstanceOf[Double].toFloat
+    output = PythonInterpreter.getValue("loss.item()").asInstanceOf[Double].toFloat
     output
   }
 
@@ -37,7 +38,6 @@ class TorchCriterion2 extends AbstractCriterion[Activity, Activity, Float]() {
 }
 
 object TorchCriterion2{
-  private[zoo] lazy val sharedJep = PythonLoaderFeatureSet.getOrCreateInterpreter()
 
   def apply(): TorchCriterion2 = {
     new TorchCriterion2()
