@@ -37,7 +37,7 @@ object PythonInterpreter {
           val str =
             s"""
                |import tensorflow as tf
-               |tf.compat.v1.set_random_seed(${1000})
+               |tf.compat.v1.set_random_seed(1000)
                |import os
                |""".stripMargin
           sharedInterpreter.exec(str)
