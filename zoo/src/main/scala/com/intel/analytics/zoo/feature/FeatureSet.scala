@@ -392,7 +392,7 @@ object PythonLoaderFeatureSet{
               Iterator.single(1)
           }.count()
           jepRDD = originRdd.mapPartitions { iter =>
-            val interp = PythonInterpreter.sharedInterpreter
+            val interp = PythonInterpreter.getSharedInterpreter()
             Iterator.single(interp)
           }.setName("SharedInterpRDD").cache()
           jepRDD.count()

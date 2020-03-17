@@ -9,8 +9,13 @@ object PythonInterpreter {
 
   private val thread = new ThreadPool(1)
   private val parThread = Array(0).par
-  var sharedInterpreter: SharedInterpreter = null
-  createInterpreter()
+  def getSharedInterpreter(): SharedInterpreter = {
+    if (sharedInterpreter == null) {
+      createInterpreter()
+    }
+    sharedInterpreter
+  }
+  private var sharedInterpreter: SharedInterpreter = createInterpreter()
   private def createInterpreter(): SharedInterpreter = {
     val createInterp = () =>
       try {

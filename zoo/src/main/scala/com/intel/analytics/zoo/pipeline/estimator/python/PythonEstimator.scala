@@ -132,7 +132,7 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
     val sc = SparkContext.getOrCreate()
     val rdd = sc.parallelize(0 to 100, 1)
     rdd.mapPartitions{iter =>
-      val c = PythonInterpreter.sharedInterpreter
+      val c = PythonInterpreter.getSharedInterpreter()
       val str =
         s"""
            |import os
@@ -156,7 +156,7 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
     sc.range(1, 10, 1, 1).mapPartitions{iter =>
       val model = bcModel.value(true)
       (0 to 32).foreach{i =>
-        val jep = PythonInterpreter.sharedInterpreter
+        val jep = PythonInterpreter.getSharedInterpreter()
         val s =
           s"""
              |import numpy as np
@@ -185,7 +185,7 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
     sc.range(1, 10, 1, 1).mapPartitions{iter =>
       val model = TorchNet2(bcModel.value, bcWeights.value.storage)
       (0 to 32).foreach{i =>
-        val jep = PythonInterpreter.sharedInterpreter
+        val jep = PythonInterpreter.getSharedInterpreter()
         val s =
           s"""
              |import numpy as np
@@ -213,7 +213,7 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
       System.setProperty("bigdl.mklNumThreads", "18")
       val model = bcModel.value(true)
       (0 to 32).foreach{i =>
-        val jep = PythonInterpreter.sharedInterpreter
+        val jep = PythonInterpreter.getSharedInterpreter()
         val s =
           s"""
              |import numpy as np
@@ -237,7 +237,7 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
     val sc = SparkContext.getOrCreate()
     val rdd = sc.parallelize(0 to 100, 1)
     rdd.mapPartitions{iter =>
-      val c = PythonInterpreter.sharedInterpreter
+      val c = PythonInterpreter.getSharedInterpreter()
       val str =
         s"""
            |import torch
