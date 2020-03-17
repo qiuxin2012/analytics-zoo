@@ -40,7 +40,7 @@ object PythonInterpreter {
                |tf.compat.v1.set_random_seed(1000)
                |import os
                |""".stripMargin
-          sharedInterpreter.exec(str)
+          exec(str)
         }
       }
     }
