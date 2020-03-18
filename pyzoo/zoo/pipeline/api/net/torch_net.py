@@ -27,7 +27,6 @@ from bigdl.util.common import JTensor
 from zoo import getOrCreateSparkContext
 from zoo.common.utils import callZooFunc
 from zoo.feature.image import ImageSet
-from zoo.tfpark.tfnet import to_sample_rdd
 
 
 if sys.version >= '3':

@@ -7,6 +7,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 class PythonInterpreterSpec extends ZooSpecHelper{
   "interp" should "work" in {
     PythonInterpreter.exec("import numpy as np")
+    PythonInterpreter.exec("np.array([1, 2, 3])")
     (0 until 1).toParArray.foreach{i =>
       PythonInterpreter.exec("np.array([1, 2, 3])")
     }

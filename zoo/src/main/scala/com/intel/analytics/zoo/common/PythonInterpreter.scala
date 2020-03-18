@@ -1,57 +1,83 @@
 package com.intel.analytics.zoo.common
 
-import com.intel.analytics.bigdl.utils.ThreadPool
-import jep.{JepConfig, NamingConventionClassEnquirer, SharedInterpreter}
+import java.util.concurrent.{ExecutorService, Executors, ThreadFactory}
 
+import com.intel.analytics.bigdl.utils.ThreadPool
+import com.intel.analytics.zoo.common.PythonInterpreter.sharedInterpreter
+import jep.{JepConfig, NamingConventionClassEnquirer, SharedInterpreter}
+import org.apache.commons.lang.exception.ExceptionUtils
+import org.apache.log4j.Logger
+
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 
 object PythonInterpreter {
+  private val logger = Logger.getLogger(this.getClass)
+  private var threadPool: ExecutorService = null
 
-  private val thread = new ThreadPool(1)
-  private val parThread = Array(0).par
+  private val context = new ExecutionContext {
+    threadPool = Executors.newFixedThreadPool(1, new ThreadFactory {
+      override def newThread(r: Runnable): Thread = {
+        val t = Executors.defaultThreadFactory().newThread(r)
+        t.setName("default-thread-computing " + t.getId)
+        t.setDaemon(true)
+        t
+      }
+    })
+
+    def execute(runnable: Runnable) {
+      threadPool.submit(runnable)
+    }
+
+    def reportFailure(t: Throwable) {}
+  }
+  //  private val parThread = Array(0).par
   def getSharedInterpreter(): SharedInterpreter = {
-    createInterpreter()
+    if (sharedInterpreter == null) {
+      this.synchronized{
+        createInterpreter()
+      }
+    }
     sharedInterpreter
   }
   private var sharedInterpreter: SharedInterpreter = createInterpreter()
   private def createInterpreter(): SharedInterpreter = {
-    val createInterp = () =>
-      try {
-        val config: JepConfig = new JepConfig()
+    val createInterp = () => {
+      println("Create jep on thread: " + Thread.currentThread())
+      val config: JepConfig = new JepConfig()
         config.setClassEnquirer(new NamingConventionClassEnquirer())
         SharedInterpreter.setConfig(config)
-        println("Create jep on thread: " + Thread.currentThread())
         val sharedInterpreter = new SharedInterpreter()
         sharedInterpreter
-      } catch {
-        case e: Exception =>
-          println(e)
-          throw e
       }
     if (sharedInterpreter == null) {
-      this.synchronized {
-        if (sharedInterpreter == null) {
-          sharedInterpreter = threadExecute(createInterp)
-          val str =
-            s"""
-               |import tensorflow as tf
-               |tf.compat.v1.set_random_seed(1000)
-               |import os
-               |""".stripMargin
-          exec(str)
-        }
-      }
+      sharedInterpreter = threadExecute(createInterp)
+      val str =
+        s"""
+           |import tensorflow as tf
+           |tf.compat.v1.set_random_seed(1000)
+           |import os
+           |""".stripMargin
+      //          exec(str)
+      //      }
     }
     sharedInterpreter
   }
 
-  private def threadExecute[T: ClassTag](task: () => T): T = {
-//    thread.invokeAndWait(Array(0).map(i => task
-//    ))(0)
-    val result = parThread.map { i =>
-      task()
-    }
-    result.apply(0)
+  private def threadExecute[T](task: () => T, timeout: Duration = Duration.Inf): T = {
+    val re = Array(task).map(t => Future {
+      try {
+        t()
+      } catch {
+        case t : Throwable =>
+          logger.error("Error: " + ExceptionUtils.getStackTrace(t))
+          throw t
+      }
+    }(context)).map(future => {
+      Await.result(future, timeout)
+    })
+    re(0)
   }
 
   def exec(s: String): Unit = {
