@@ -10,9 +10,7 @@ object PythonInterpreter {
   private val thread = new ThreadPool(1)
   private val parThread = Array(0).par
   def getSharedInterpreter(): SharedInterpreter = {
-    if (sharedInterpreter == null) {
-      createInterpreter()
-    }
+    createInterpreter()
     sharedInterpreter
   }
   private var sharedInterpreter: SharedInterpreter = createInterpreter()
@@ -31,7 +29,7 @@ object PythonInterpreter {
           throw e
       }
     if (sharedInterpreter == null) {
-      synchronized{
+      this.synchronized {
         if (sharedInterpreter == null) {
           sharedInterpreter = threadExecute(createInterp)
           val str =
