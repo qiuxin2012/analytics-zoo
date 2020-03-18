@@ -30,7 +30,9 @@ object PythonInterpreter {
       threadPool.submit(runnable)
     }
 
-    def reportFailure(t: Throwable) {}
+    def reportFailure(t: Throwable): Unit = {
+      throw t
+    }
   }
   //  private val parThread = Array(0).par
   def getSharedInterpreter(): SharedInterpreter = {
@@ -66,18 +68,18 @@ object PythonInterpreter {
   }
 
   private def threadExecute[T](task: () => T, timeout: Duration = Duration.Inf): T = {
-    val re = Array(task).map(t => Future {
-      try {
+    try {
+      val re = Array(task).map(t => Future {
         t()
-      } catch {
-        case t : Throwable =>
-          logger.error("Error: " + ExceptionUtils.getStackTrace(t))
-          throw t
-      }
-    }(context)).map(future => {
-      Await.result(future, timeout)
-    })
-    re(0)
+      }(context)).map(future => {
+        Await.result(future, timeout)
+      })
+      re(0)
+    } catch {
+      case t : Throwable =>
+        logger.error("Error: " + ExceptionUtils.getStackTrace(t))
+        throw t
+    }
   }
 
   def exec(s: String): Unit = {
