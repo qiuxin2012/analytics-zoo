@@ -127,7 +127,7 @@ class TorchNet2 private(private val modelHolder: TorchModelHolder2, init_weights
     val startTime = System.nanoTime()
     val backwardCode =
       s"""
-        |loss.backward()
+        |loss.backward(retain_graph=True)
         |grads=[]
         |for param in ${getName()}.parameters():
         |    grads.append(param.grad.view(-1))
