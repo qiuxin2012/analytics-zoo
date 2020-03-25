@@ -111,12 +111,13 @@ def main():
                     "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
 
     model = Net()
+    criterion = nn.NLLLoss()
     # optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
     model.train()
     adam = Adam(1e-2)
     zooModel = TorchNet2.from_pytorch(model)
-    zooCriterion = TorchCriterion2()
+    zooCriterion = TorchCriterion2.from_pytorch(criterion)
     # from bigdl.models.lenet.lenet5 import build_model
     # zooModel = build_model(10)
     # def lossFunc(input, target):

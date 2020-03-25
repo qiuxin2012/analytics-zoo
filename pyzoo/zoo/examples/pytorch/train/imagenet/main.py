@@ -175,7 +175,7 @@ def main():
         return criterion.forward(input, target.flatten().long())
 
     # zooCriterion = TorchCriterion.from_pytorch(lossFunc, [1, 1000], torch.LongTensor([1]))
-    zooCriterion = TorchCriterion2()
+    zooCriterion = TorchCriterion2(criterion)
     # zooCriterion = SparseCategoricalCrossEntropy(zero_based_label=True)
     # from bigdl.nn.criterion import ClassNLLCriterion
     # zooCriterion = ClassNLLCriterion()

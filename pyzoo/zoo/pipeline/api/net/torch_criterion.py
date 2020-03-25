@@ -99,8 +99,15 @@ class TorchCriterion2(Criterion):
     Use TorchCriterion.from_pytorch to initialize.
     """
 
-    def __init__(self, bigdl_type="float"):
+    def __init__(self, criterion_bytes, bigdl_type="float"):
         """
         :param bigdl_type:
         """
-        super(TorchCriterion2, self).__init__(None, bigdl_type)
+        super(TorchCriterion2, self).__init__(None, criterion_bytes, bigdl_type)
+
+    @staticmethod
+    def from_pytorch(criterion):
+        from pyspark.serializers import CloudPickleSerializer
+        bys = CloudPickleSerializer.dumps(CloudPickleSerializer, criterion)
+        net = TorchCriterion2(bys)
+        return net

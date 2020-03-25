@@ -15,17 +15,32 @@
  */
 package com.intel.analytics.zoo.pipeline.api.net
 
+import java.util.UUID
+
 import com.intel.analytics.bigdl.nn.abstractnn.{AbstractCriterion, Activity}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.zoo.common.PythonInterpreter
 import com.intel.analytics.zoo.feature.PythonLoaderFeatureSet
+import com.intel.analytics.zoo.pipeline.api.net.TorchCriterion2.TorchCriterion2Holder
 
 
-class TorchCriterion2 extends AbstractCriterion[Activity, Activity, Float]() {
+class TorchCriterion2(private val criterionHolder: TorchCriterion2Holder)
+  extends AbstractCriterion[Activity, Activity, Float]() {
   import TorchCriterion2._
 
+  protected lazy val loaded = {
+    PythonInterpreter.set("model_bytes", criterionHolder.torchBytes)
+    val loadModelCode =
+      s"""
+         |from pyspark.serializers import CloudPickleSerializer
+         |${getName()} = CloudPickleSerializer.loads(CloudPickleSerializer, by)
+         |""".stripMargin
+    PythonInterpreter.exec(loadModelCode)
+    true
+  }
+
   override def updateOutput(input: Activity, target: Activity): Float = {
-    println(Thread.currentThread())
+    PythonInterpreter.exec(s"loss = ${getName()}(output, target)")
     output = PythonInterpreter.getValue("loss.item()").asInstanceOf[Double].toFloat
     output
   }
@@ -35,12 +50,62 @@ class TorchCriterion2 extends AbstractCriterion[Activity, Activity, Float]() {
     Tensor[Float]()
   }
 
+  final def getName() : String = {
+    s"${this.getClass.getSimpleName}${Integer.toHexString(java.util.UUID.randomUUID().hashCode())}"
+  }
+
 }
 
 object TorchCriterion2{
 
-  def apply(): TorchCriterion2 = {
-    new TorchCriterion2()
+  private val modelBytesRegistry = new RegistryMap[Array[Byte]]()
+
+  @transient
+  private lazy val inDriver = NetUtils.isDriver
+
+  class TorchCriterion2Holder(@transient var torchBytes: Array[Byte], private var id: String)
+    extends SerializationHolder {
+
+    override def writeInternal(out: CommonOutputStream): Unit = {
+      val (graphDef, _) = modelBytesRegistry.getOrCreate(id) {
+        torchBytes
+      }
+      val len = graphDef.length
+      out.writeString(id)
+      if (inDriver) {
+        out.writeInt(len)
+        timing(s"writing ${len / 1024 / 1024}Mb torch model to stream") {
+          out.write(graphDef)
+        }
+      } else {
+        out.writeInt(0)
+      }
+    }
+
+    override def readInternal(in: CommonInputStream): Unit = {
+      id = in.readString()
+      val (graph, _) = modelBytesRegistry.getOrCreate(id) {
+        val len = in.readInt()
+        assert(len >= 0, "GraphDef length should be an non-negative integer")
+        val graphDef = new Array[Byte](len)
+        timing("reading graph def from stream") {
+          var numOfBytes = 0
+          while (numOfBytes < len) {
+            val read = in.read(graphDef, numOfBytes, len - numOfBytes)
+            numOfBytes += read
+          }
+        }
+        graphDef
+      }
+
+      torchBytes = graph
+      id = id
+    }
+
+  }
+
+  def apply(modelBytes: Array[Byte]): TorchCriterion2 = {
+    new TorchCriterion2(new TorchCriterion2Holder(modelBytes, UUID.randomUUID().toString))
   }
 }
 
