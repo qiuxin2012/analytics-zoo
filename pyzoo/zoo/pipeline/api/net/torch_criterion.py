@@ -103,7 +103,7 @@ class TorchCriterion2(Criterion):
         """
         :param bigdl_type:
         """
-        super(TorchCriterion2, self).__init__(None, criterion_bytes, bigdl_type)
+        super(TorchCriterion2, self).__init__(None, bigdl_type, criterion_bytes)
 
     @staticmethod
     def from_pytorch(criterion):
