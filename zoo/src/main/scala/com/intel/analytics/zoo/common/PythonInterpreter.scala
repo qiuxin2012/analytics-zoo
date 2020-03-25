@@ -84,24 +84,28 @@ object PythonInterpreter {
 
   def exec(s: String): Unit = {
     val func = () => {
-      println("jep exec on thread: " + Thread.currentThread())
+      println(s"jep exec ${s} on thread: " + Thread.currentThread())
       sharedInterpreter.exec(s)
+      println("jep exec finished")
     }
     threadExecute(func)
   }
 
   def set(s: String, o: AnyRef): Unit = {
     val func = () => {
-      println("jep set on thread: " + Thread.currentThread())
+      println(s"jep set ${s} on thread: " + Thread.currentThread())
       sharedInterpreter.set(s, o)
+      println("jep set finished")
     }
     threadExecute(func)
   }
 
   def getValue[T](name: String): T = {
     val func = () => {
-      println("jep getValue on thread: " + Thread.currentThread())
-      sharedInterpreter.getValue(name)
+      println(s"jep getValue ${name} on thread: " + Thread.currentThread())
+      val re = sharedInterpreter.getValue(name)
+      println("jep getValue finished")
+      re
     }
     threadExecute(func).asInstanceOf[T]
   }
