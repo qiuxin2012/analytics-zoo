@@ -40,6 +40,7 @@ class TorchCriterion2(private val criterionHolder: TorchCriterion2Holder)
   }
 
   override def updateOutput(input: Activity, target: Activity): Float = {
+    loaded
     PythonInterpreter.exec(s"loss = ${getName()}(output, target)")
     output = PythonInterpreter.getValue("loss.item()").asInstanceOf[Double].toFloat
     output
