@@ -22,35 +22,6 @@ model_names = sorted(name for name in torchvision.models.__dict__
                      and callable(torchvision.models.__dict__[name]))
 
 def main():
-    # sc = init_nncontext()
-    sc = init_spark_on_local(cores=8, conf={"spark.driver.memory": "20g"})
-    #hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
-    #num_executors = 2
-    #num_cores_per_executor = 4
-    #sc = init_spark_on_yarn(
-    #    hadoop_conf=hadoop_conf_dir,
-    #    conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
-    #    num_executor=num_executors,
-    #    executor_cores=num_cores_per_executor,
-    #    executor_memory="10g",
-    #    driver_memory="10g",
-    #    driver_cores=1,
-    #    spark_conf={"spark.rpc.message.maxSize": "1024",
-    #                "spark.task.maxFailures":  "1",
-    #                "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
-    import time
-    s = time.time()
-    Estimator.print()
-    #Estimator.test()
-    print("test 1: " + str(time.time() - s))    
-    #Estimator.print()
-    ##Estimator.test()
-    ##print("test 2: " + str(time.time() - s))    
-    ##Estimator.test()
-    ##print("test 3: " + str(time.time() - s))    
-    ##Estimator.test()
-    ##print("test 4: " + str(time.time() - s))    
-    # Training settings
     parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
     parser.add_argument('data', metavar='DIR',
                         help='path to dataset')
@@ -59,7 +30,7 @@ def main():
                         help='model architecture: ' +
                              ' | '.join(model_names) +
                              ' (default: resnet18)')
-    parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
+    parser.add_argument('-j', '--workers', default=0, type=int, metavar='N',
                         help='number of data loading workers (default: 4)')
     parser.add_argument('--epochs', default=90, type=int, metavar='N',
                         help='number of total epochs to run')
@@ -97,12 +68,34 @@ def main():
                         help='seed for initializing training. ')
     parser.add_argument('--gpu', default=None, type=int,
                         help='GPU id to use.')
+    parser.add_argument('--cores', default=1, type=int,
+                        help='num of CPUs to use.')
     parser.add_argument('--multiprocessing-distributed', action='store_true',
                         help='Use multi-processing distributed training to launch '
                              'N processes per node, which has N GPUs. This is the '
                              'fastest way to use PyTorch for either single node or '
                              'multi node data parallel training')
     args = parser.parse_args()
+    # sc = init_nncontext()
+    hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
+    num_executors = 30
+    num_cores_per_executor = args.cores
+    os.environ['ZOO_MKL_NUMTHREADS'] = str(num_cores_per_executor)
+    os.environ['OMP_NUM_THREADS'] = str(num_cores_per_executor)
+    #sc = init_spark_on_local(cores=args.cores, conf={"spark.driver.memory": "20g"})
+    sc = init_spark_on_yarn(
+        hadoop_conf=hadoop_conf_dir,
+        conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
+        num_executor=num_executors,
+        executor_cores=num_cores_per_executor,
+        executor_memory="20g",
+        driver_memory="20g",
+        driver_cores=1,
+        spark_conf={"spark.rpc.message.maxSize": "1024",
+                    "spark.task.maxFailures":  "1",
+                    "spark.scheduler.minRegisteredResourcesRatio": "1",
+                    "spark.scheduler.maxRegisteredResourcesWaitingTime": "100s",
+                    "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
 
     # Data loading code
     traindir = os.path.join(args.data, 'train')
@@ -120,7 +113,7 @@ def main():
         ]))
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=1)
+        train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers)
 
     model = torchvision.models.resnet50()
     model.train()
@@ -137,9 +130,8 @@ def main():
             normalize,
         ])),
         batch_size=args.batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=True)
+        num_workers=args.workers)
 
-    model = torchvision.models.resnet50()
    #criterion = nn.CrossEntropyLoss()
    #import time
    #for i, (images, target) in enumerate(train_loader):
@@ -195,9 +187,9 @@ def main():
     # estimator.evaluate_minibatch(train_featureSet, [Accuracy()])
     from bigdl.optim.optimizer import MaxEpoch, EveryEpoch, MaxIteration
     from zoo.pipeline.api.keras.metrics import Accuracy
-    estimator.train_minibatch(train_featureSet, zooCriterion, end_trigger=MaxEpoch(3), checkpoint_trigger=EveryEpoch(),
+    estimator.train_minibatch(train_featureSet, zooCriterion, end_trigger=MaxEpoch(1), checkpoint_trigger=EveryEpoch(),
                               validation_set=test_featureSet, validation_method=[Accuracy()])
-    Estimator.print()
+    #Estimator.print()
 
 if __name__ == '__main__':
     main()
