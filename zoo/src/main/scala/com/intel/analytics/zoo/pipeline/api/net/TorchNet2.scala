@@ -50,7 +50,6 @@ class TorchNet2 private(private val modelHolder: TorchModel2Holder, init_weights
          |import torch.nn as nn
          |import torch.nn.functional as F
          |import torchvision
-         |by = bytes(b % 256 for b in model_bytes)
          |def tensor_to_numpy(elements):
          |    if isinstance(elements, np.ndarray):
          |        return elements
@@ -69,6 +68,7 @@ class TorchNet2 private(private val modelHolder: TorchModel2Holder, init_weights
          |    return tuple([tensor_to_numpy(d) for d in data])
          |
          |from pyspark.serializers import CloudPickleSerializer
+         |by = bytes(b % 256 for b in model_bytes)
          |${getName()} = CloudPickleSerializer.loads(CloudPickleSerializer, by)
          |""".stripMargin
     PythonInterpreter.exec(loadModelCode)

@@ -27,11 +27,12 @@ class TorchCriterion2(private val criterionHolder: Array[Byte])
   import TorchCriterion2._
 
   protected lazy val loaded = {
-    PythonInterpreter.set("model_bytes", criterionHolder)
+    PythonInterpreter.set("criterion_bytes", criterionHolder)
     val loadModelCode =
       s"""
          |from pyspark.serializers import CloudPickleSerializer
-         |${getName()} = CloudPickleSerializer.loads(CloudPickleSerializer, by)
+         |c_by = bytes(b % 256 for b in criterion_bytes)
+         |${getName()} = CloudPickleSerializer.loads(CloudPickleSerializer, c_by)
          |""".stripMargin
     PythonInterpreter.exec(loadModelCode)
     true
