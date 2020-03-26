@@ -4,7 +4,7 @@ import java.util.concurrent.{ExecutorService, Executors, ThreadFactory}
 
 import com.intel.analytics.bigdl.utils.ThreadPool
 import com.intel.analytics.zoo.common.PythonInterpreter.sharedInterpreter
-import jep.{JepConfig, NamingConventionClassEnquirer, SharedInterpreter}
+import jep.{JepConfig, JepException, NamingConventionClassEnquirer, SharedInterpreter}
 import org.apache.commons.lang.exception.ExceptionUtils
 import org.apache.log4j.Logger
 
@@ -77,8 +77,8 @@ object PythonInterpreter {
       re(0)
     } catch {
       case t : Throwable =>
-        logger.error("Error: " + ExceptionUtils.getStackTrace(t))
-        throw t
+        logger.debug("Error: " + ExceptionUtils.getStackTrace(t))
+        throw new JepException(t)
     }
   }
 

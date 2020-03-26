@@ -32,7 +32,7 @@ class TorchCriterion2(private val criterionHolder: Array[Byte])
       s"""
          |from pyspark.serializers import CloudPickleSerializer
          |c_by = bytes(b % 256 for b in criterion_bytes)
-         |${getName()} = CloudPickleSerializer.loads(CloudPickleSerializer, c_by)
+         |${name} = CloudPickleSerializer.loads(CloudPickleSerializer, c_by)
          |""".stripMargin
     PythonInterpreter.exec(loadModelCode)
     true
@@ -40,7 +40,7 @@ class TorchCriterion2(private val criterionHolder: Array[Byte])
 
   override def updateOutput(input: Activity, target: Activity): Float = {
     loaded
-    PythonInterpreter.exec(s"loss = ${getName()}(output, target)")
+    PythonInterpreter.exec(s"loss = ${name}(output, target)")
     output = PythonInterpreter.getValue("loss.item()").asInstanceOf[Double].toFloat
     output
   }
@@ -50,9 +50,8 @@ class TorchCriterion2(private val criterionHolder: Array[Byte])
     Tensor[Float]()
   }
 
-  final def getName() : String = {
+  protected val name =
     s"${this.getClass.getSimpleName}${Integer.toHexString(java.util.UUID.randomUUID().hashCode())}"
-  }
 
 }
 
