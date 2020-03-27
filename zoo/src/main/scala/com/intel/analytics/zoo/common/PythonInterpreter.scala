@@ -20,7 +20,7 @@ object PythonInterpreter {
     threadPool = Executors.newFixedThreadPool(1, new ThreadFactory {
       override def newThread(r: Runnable): Thread = {
         val t = Executors.defaultThreadFactory().newThread(r)
-        t.setName("default-thread-computing " + t.getId)
+        t.setName("jep-thread " + t.getId)
         t.setDaemon(true)
         t
       }
@@ -46,7 +46,7 @@ object PythonInterpreter {
   private var sharedInterpreter: SharedInterpreter = createInterpreter()
   private def createInterpreter(): SharedInterpreter = {
     val createInterp = () => {
-      println("Create jep on thread: " + Thread.currentThread())
+      logger.debug("Create jep on thread: " + Thread.currentThread())
       val config: JepConfig = new JepConfig()
         config.setClassEnquirer(new NamingConventionClassEnquirer())
         SharedInterpreter.setConfig(config)
@@ -55,14 +55,6 @@ object PythonInterpreter {
       }
     if (sharedInterpreter == null) {
       sharedInterpreter = threadExecute(createInterp)
-      val str =
-        s"""
-           |import tensorflow as tf
-           |tf.compat.v1.set_random_seed(1000)
-           |import os
-           |""".stripMargin
-      //          exec(str)
-      //      }
     }
     sharedInterpreter
   }
@@ -84,27 +76,27 @@ object PythonInterpreter {
 
   def exec(s: String): Unit = {
     val func = () => {
-      println(s"jep exec ${s} on thread: " + Thread.currentThread())
+      logger.debug(s"jep exec ${s} on thread: " + Thread.currentThread())
       sharedInterpreter.exec(s)
-      println("jep exec finished")
+      logger.debug("jep exec finished")
     }
     threadExecute(func)
   }
 
   def set(s: String, o: AnyRef): Unit = {
     val func = () => {
-      println(s"jep set ${s} on thread: " + Thread.currentThread())
+      logger.debug(s"jep set ${s} on thread: " + Thread.currentThread())
       sharedInterpreter.set(s, o)
-      println("jep set finished")
+      logger.debug("jep set finished")
     }
     threadExecute(func)
   }
 
   def getValue[T](name: String): T = {
     val func = () => {
-      println(s"jep getValue ${name} on thread: " + Thread.currentThread())
+      logger.debug(s"jep getValue ${name} on thread: " + Thread.currentThread())
       val re = sharedInterpreter.getValue(name)
-      println("jep getValue finished")
+      logger.debug("jep getValue finished")
       re
     }
     threadExecute(func).asInstanceOf[T]

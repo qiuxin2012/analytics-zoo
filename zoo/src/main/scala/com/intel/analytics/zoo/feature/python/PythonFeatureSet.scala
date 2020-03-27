@@ -87,9 +87,11 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
         totalSize: Int): FeatureSet[MiniBatch[Float]] = {
     val nodeNumber = EngineRef.getNodeNumber()
     // set a random seed to make sure shuffle is the same in each executor
+    // TODO: make the seed a parameter
     val imports =
       s"""
          |import tensorflow as tf
+         |tf.compat.v1.set_random_seed(${(System.nanoTime()) % 100})
          |from zoo.util.nest import flatten
          |sess = tf.Session()
          |""".stripMargin
