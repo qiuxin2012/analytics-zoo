@@ -2,18 +2,17 @@ package com.intel.analytics.zoo.common
 
 import java.util.concurrent.{ExecutorService, Executors, ThreadFactory}
 
-import com.intel.analytics.bigdl.utils.ThreadPool
-import com.intel.analytics.zoo.common.PythonInterpreter.sharedInterpreter
+import com.intel.analytics.zoo.pipeline.api.net.NetUtils
 import jep.{JepConfig, JepException, NamingConventionClassEnquirer, SharedInterpreter}
 import org.apache.commons.lang.exception.ExceptionUtils
-import org.apache.log4j.Logger
+import org.apache.log4j.{Level, Logger}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
-import scala.reflect.ClassTag
 
 object PythonInterpreter {
-  private val logger = Logger.getLogger(this.getClass)
+  protected val logger = Logger.getLogger(this.getClass)
+
   private var threadPool: ExecutorService = null
 
   private val context = new ExecutionContext {
@@ -34,32 +33,24 @@ object PythonInterpreter {
       throw t
     }
   }
-  //  private val parThread = Array(0).par
   def getSharedInterpreter(): SharedInterpreter = {
-    if (sharedInterpreter == null) {
-      this.synchronized{
-        createInterpreter()
-      }
-    }
     sharedInterpreter
   }
-  private var sharedInterpreter: SharedInterpreter = createInterpreter()
+
+  private val sharedInterpreter: SharedInterpreter = createInterpreter()
   private def createInterpreter(): SharedInterpreter = {
     val createInterp = () => {
-      logger.debug("Create jep on thread: " + Thread.currentThread())
       val config: JepConfig = new JepConfig()
         config.setClassEnquirer(new NamingConventionClassEnquirer())
         SharedInterpreter.setConfig(config)
         val sharedInterpreter = new SharedInterpreter()
         sharedInterpreter
       }
-    if (sharedInterpreter == null) {
-      sharedInterpreter = threadExecute(createInterp)
-    }
-    sharedInterpreter
+    threadExecute(createInterp)
   }
 
-  private def threadExecute[T](task: () => T, timeout: Duration = Duration.Inf): T = {
+  private def threadExecute[T](task: () => T,
+                               timeout: Duration = Duration.Inf): T = {
     try {
       val re = Array(task).map(t => Future {
         t()
@@ -68,35 +59,32 @@ object PythonInterpreter {
       })
       re(0)
     } catch {
-      case t : Throwable =>
+      case t: Throwable =>
         logger.debug("Error: " + ExceptionUtils.getStackTrace(t))
         throw new JepException(t)
     }
   }
 
   def exec(s: String): Unit = {
+    logger.debug(s"jep exec ${s}")
     val func = () => {
-      logger.debug(s"jep exec ${s} on thread: " + Thread.currentThread())
       sharedInterpreter.exec(s)
-      logger.debug("jep exec finished")
     }
     threadExecute(func)
   }
 
   def set(s: String, o: AnyRef): Unit = {
+    logger.debug(s"jep set ${s}")
     val func = () => {
-      logger.debug(s"jep set ${s} on thread: " + Thread.currentThread())
       sharedInterpreter.set(s, o)
-      logger.debug("jep set finished")
     }
     threadExecute(func)
   }
 
   def getValue[T](name: String): T = {
+    logger.debug(s"jep getValue ${name}")
     val func = () => {
-      logger.debug(s"jep getValue ${name} on thread: " + Thread.currentThread())
       val re = sharedInterpreter.getValue(name)
-      logger.debug("jep getValue finished")
       re
     }
     threadExecute(func).asInstanceOf[T]
