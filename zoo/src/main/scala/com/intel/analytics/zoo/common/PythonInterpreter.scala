@@ -39,6 +39,9 @@ object PythonInterpreter {
 
   private val sharedInterpreter: SharedInterpreter = createInterpreter()
   private def createInterpreter(): SharedInterpreter = {
+    if (System.getenv("PYTHONHOME") == null) {
+      throw new RuntimeException("PYTHONHOME is unset, please set PYTHONHOME first")
+    }
     val createInterp = () => {
       val config: JepConfig = new JepConfig()
         config.setClassEnquirer(new NamingConventionClassEnquirer())
@@ -60,7 +63,8 @@ object PythonInterpreter {
       re(0)
     } catch {
       case t: Throwable =>
-        logger.debug("Error: " + ExceptionUtils.getStackTrace(t))
+        // Don't use logger here, or spark local will stuck when catch an exception.
+        println("Error: " + ExceptionUtils.getStackTrace(t))
         throw new JepException(t)
     }
   }
