@@ -49,6 +49,7 @@ object PythonInterpreter {
         val sharedInterpreter = new SharedInterpreter()
         sharedInterpreter
       }
+    logger.debug("Creating jep interpreter...")
     threadExecute(createInterp)
   }
 
