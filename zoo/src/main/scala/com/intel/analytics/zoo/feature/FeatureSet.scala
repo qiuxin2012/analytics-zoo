@@ -342,7 +342,7 @@ object PythonLoaderFeatureSet{
       loaderName: String,
       dataset: Array[Byte],
       imports: String,
-      interpRdd: RDD[SharedInterpreter]): Unit = {
+      interpRdd: RDD[Int]): Unit = {
     val bcDataSet = interpRdd.sparkContext.broadcast(dataset)
     val nodeNumber = EngineRef.getNodeNumber()
     val preimports = s"""
@@ -350,7 +350,6 @@ object PythonLoaderFeatureSet{
       |import numpy as np
       |""".stripMargin + imports
     interpRdd.mapPartitions{iter =>
-      val interp = iter.next()
       val partId = TaskContext.getPartitionId()
       require(partId < nodeNumber, s"partId($partId) should be" +
         s" smaller than nodeNumber(${nodeNumber})")
@@ -367,66 +366,29 @@ object PythonLoaderFeatureSet{
         |""".stripMargin
 
       PythonInterpreter.exec(load)
-      Iterator.single(interp)
+      Iterator.single(1)
     }.count()
 
   }
 
-  private var jepRDD: RDD[SharedInterpreter] = null
-  protected def getOrCreateInterpRdd(): RDD[SharedInterpreter] = {
-    if (jepRDD == null) {
-      this.synchronized {
-        if (jepRDD == null) {
-          val sc = SparkContext.getOrCreate()
-          val nodeNumber = EngineRef.getNodeNumber()
-          // TODO: make sure 1 executor 1 partition
-          val originRdd = sc.parallelize(
-            Array.tabulate(nodeNumber)(_ => "dummy123123"), nodeNumber * 10)
-            .mapPartitions(_ => (0 until 20000000).toIterator)
-            .coalesce(nodeNumber)
-            .setName("PartitionRDD")
-            .persist(StorageLevel.DISK_ONLY)
-          originRdd.count()
-          originRdd.mapPartitions{
-            _ => TFNetNative.isLoaded
-              Iterator.single(1)
-          }.count()
-          jepRDD = originRdd.mapPartitions { iter =>
-            val interp = PythonInterpreter.getSharedInterpreter()
-            Iterator.single(interp)
-          }.setName("SharedInterpRDD").cache()
-          jepRDD.count()
-        }
-      }
-    }
-    jepRDD
+  protected val cachedRdd: RDD[Int] = createCachedRdd()
+  protected def createCachedRdd(): RDD[Int] = {
+    val sc = SparkContext.getOrCreate()
+    val nodeNumber = EngineRef.getNodeNumber()
+    // TODO: make sure 1 executor 1 partition
+    val originRdd = sc.parallelize(
+      Array.tabulate(nodeNumber)(_ => "dummy123123"), nodeNumber * 10)
+      .mapPartitions(_ => (0 until 20000000).toIterator)
+      .coalesce(nodeNumber)
+      .setName("PartitionRDD")
+      .persist(StorageLevel.DISK_ONLY)
+    originRdd.count()
+    originRdd.mapPartitions{
+      _ => TFNetNative.isLoaded
+        Iterator.single(1)
+    }.count()
+    originRdd
   }
-
-//  private var sharedInterpreter: SharedInterpreter = null
-//  private[zoo] def getOrCreateInterpreter(): SharedInterpreter = {
-//    if (sharedInterpreter == null) {
-//      try {
-//        if (sharedInterpreter == null) {
-//          val config: JepConfig = new JepConfig()
-//          config.setClassEnquirer(new NamingConventionClassEnquirer())
-//          SharedInterpreter.setConfig(config)
-//          sharedInterpreter = new SharedInterpreter()
-//          val str =
-//            s"""
-//               |import tensorflow as tf
-//               |tf.compat.v1.set_random_seed(${1000})
-//               |import os
-//               |""".stripMargin
-//          sharedInterpreter.exec(str)
-//        }
-//      } catch {
-//        case e: Exception =>
-//          println(e)
-//
-//      }
-//    }
-//    sharedInterpreter
-//  }
 
   protected def toArrayTensor(
         data: AnyRef): Array[Tensor[Float]] = {
@@ -471,11 +433,10 @@ class PythonLoaderFeatureSet[T: ClassTag](
   protected val namePostfix = Integer.toHexString(java.util.UUID.randomUUID().hashCode())
   protected val loaderName = s"loader${namePostfix}"
 
-  protected val sharedInterp = getOrCreateInterpRdd()
-  loadPytorchLoader(loaderName, dataset, imports, sharedInterp)
+  loadPytorchLoader(loaderName, dataset, imports, cachedRdd)
 
   override def originRDD(): RDD[_] = {
-    sharedInterp
+    cachedRdd
   }
 
   override def data(train: Boolean): RDD[T] = {
@@ -485,8 +446,7 @@ class PythonLoaderFeatureSet[T: ClassTag](
     val getNext = this.getNext
     val getIterator = this.getIterator
     if (train) {
-      sharedInterp.mapPartitions{dataIter =>
-        val interp = dataIter.next()
+      cachedRdd.mapPartitions{dataIter =>
         val localLoaderName = getLocalLoader(loaderName)
         val localIterName = getLocalIter(localLoaderName, train)
         val getIteratorCode = getIterator(localIterName, localLoaderName)
@@ -530,8 +490,7 @@ class PythonLoaderFeatureSet[T: ClassTag](
         }
       }
     } else {
-      sharedInterp.mapPartitions{ dataIter =>
-        val interp = dataIter.next()
+      cachedRdd.mapPartitions{ dataIter =>
         val localLoaderName = getLocalLoader(loaderName)
         val localIterName = getLocalIter(localLoaderName, train)
         PythonInterpreter.exec(getIterator(localIterName, localLoaderName))
