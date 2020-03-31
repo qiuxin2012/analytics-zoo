@@ -40,7 +40,7 @@ object PythonInterpreter {
   private val sharedInterpreter: SharedInterpreter = createInterpreter()
   private def createInterpreter(): SharedInterpreter = {
     if (System.getenv("PYTHONHOME") == null) {
-      throw new RuntimeException("PYTHONHOME is unset, please set PYTHONHOME first")
+      throw new RuntimeException("PYTHONHOME is unset, please set PYTHONHOME first.")
     }
     val createInterp = () => {
       val config: JepConfig = new JepConfig()
