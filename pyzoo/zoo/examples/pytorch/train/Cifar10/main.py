@@ -1,166 +1,207 @@
-# example copy from https://github.com/pytorch/tutorials/blob/master/beginner_source/blitz/cifar10_tutorial.py
-"""
-Training a Classifier
-=====================
-This is it. You have seen how to define neural networks, compute loss and make
-updates to the weights of the network.
-Now you might be thinking,
-What about data?
-----------------
-Generally, when you have to deal with image, text, audio or video data,
-you can use standard python packages that load data into a numpy array.
-Then you can convert this array into a ``torch.*Tensor``.
--  For images, packages such as Pillow, OpenCV are useful
--  For audio, packages such as scipy and librosa
--  For text, either raw Python or Cython based loading, or NLTK and
-   SpaCy are useful
-Specifically for vision, we have created a package called
-``torchvision``, that has data loaders for common datasets such as
-Imagenet, CIFAR10, MNIST, etc. and data transformers for images, viz.,
-``torchvision.datasets`` and ``torch.utils.data.DataLoader``.
-This provides a huge convenience and avoids writing boilerplate code.
-For this tutorial, we will use the CIFAR10 dataset.
-It has the classes: ‘airplane’, ‘automobile’, ‘bird’, ‘cat’, ‘deer’,
-‘dog’, ‘frog’, ‘horse’, ‘ship’, ‘truck’. The images in CIFAR-10 are of
-size 3x32x32, i.e. 3-channel color images of 32x32 pixels in size.
-.. figure:: /_static/img/cifar10.png
-   :alt: cifar10
-   cifar10
-Training an image classifier
-----------------------------
-We will do the following steps in order:
-1. Load and normalizing the CIFAR10 training and test datasets using
-   ``torchvision``
-2. Define a Convolutional Neural Network
-3. Define a loss function
-4. Train the network on the training data
-5. Test the network on the test data
-1. Loading and normalizing CIFAR10
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Using ``torchvision``, it’s extremely easy to load CIFAR10.
-"""
-import torch
-import torchvision
-import torchvision.transforms as transforms
-
+from __future__ import print_function
+import argparse
 import torch
 import torch.nn as nn
 import torchvision
 import torch.nn.functional as F
+import torch.optim as optim
 from torchvision import datasets, transforms
 from zoo.pipeline.api.net.torch_net import TorchNet2
 from zoo.pipeline.api.net.torch_criterion import TorchCriterion2
 from zoo.pipeline.estimator import *
-from bigdl.optim.optimizer import SGD, Adam
+from bigdl.optim.optimizer import SGD, Step
+from zoo.pipeline.api.keras.optimizers import Adam
 from zoo.common.nncontext import *
 from zoo.feature.common import FeatureSet
 from bigdl.optim.optimizer import Loss
 from zoo.pipeline.api.keras.metrics import Accuracy
+import time
+from zoo.pipeline.api.keras.objectives import SparseCategoricalCrossEntropy
 
-########################################################################
-# The output of torchvision datasets are PILImage images of range [0, 1].
-# We transform them to Tensors of normalized range [-1, 1].
-# .. note::
-#     If running on Windows and you get a BrokenPipeError, try setting
-#     the num_worker of torch.utils.data.DataLoader() to 0.
+model_names = sorted(name for name in torchvision.models.__dict__
+                     if name.islower() and not name.startswith("__")
+                     and callable(torchvision.models.__dict__[name]))
 
-transform = transforms.Compose(
-    [transforms.ToTensor(),
-     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+def main():
+    parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
+    parser.add_argument('data', metavar='DIR',
+                        help='path to dataset')
+    parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
+                        choices=model_names,
+                        help='model architecture: ' +
+                             ' | '.join(model_names) +
+                             ' (default: resnet18)')
+    parser.add_argument('-j', '--workers', default=0, type=int, metavar='N',
+                        help='number of data loading workers (default: 4)')
+    parser.add_argument('--epochs', default=90, type=int, metavar='N',
+                        help='number of total epochs to run')
+    parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
+                        help='manual epoch number (useful on restarts)')
+    parser.add_argument('-b', '--batch-size', default=256, type=int,
+                        metavar='N',
+                        help='mini-batch size (default: 256), this is the total '
+                             'batch size of all GPUs on the current node when '
+                             'using Data Parallel or Distributed Data Parallel')
+    parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
+                        metavar='LR', help='initial learning rate', dest='lr')
+    parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
+                        help='momentum')
+    parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
+                        metavar='W', help='weight decay (default: 1e-4)',
+                        dest='weight_decay')
+    parser.add_argument('-p', '--print-freq', default=10, type=int,
+                        metavar='N', help='print frequency (default: 10)')
+    parser.add_argument('--resume', default='', type=str, metavar='PATH',
+                        help='path to latest checkpoint (default: none)')
+    parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
+                        help='evaluate model on validation set')
+    parser.add_argument('--pretrained', dest='pretrained', action='store_true',
+                        help='use pre-trained model')
+    parser.add_argument('--world-size', default=-1, type=int,
+                        help='number of nodes for distributed training')
+    parser.add_argument('--rank', default=-1, type=int,
+                        help='node rank for distributed training')
+    parser.add_argument('--dist-url', default='tcp://224.66.41.62:23456', type=str,
+                        help='url used to set up distributed training')
+    parser.add_argument('--dist-backend', default='nccl', type=str,
+                        help='distributed backend')
+    parser.add_argument('--seed', default=None, type=int,
+                        help='seed for initializing training. ')
+    parser.add_argument('--gpu', default=None, type=int,
+                        help='GPU id to use.')
+    parser.add_argument('--cores', default=1, type=int,
+                        help='num of CPUs to use.')
+    parser.add_argument('--multiprocessing-distributed', action='store_true',
+                        help='Use multi-processing distributed training to launch '
+                             'N processes per node, which has N GPUs. This is the '
+                             'fastest way to use PyTorch for either single node or '
+                             'multi node data parallel training')
+    args = parser.parse_args()
+    # sc = init_nncontext()
+    sc = init_spark_on_local(cores=args.cores, conf={"spark.driver.memory": "20g"})
+    # hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
+    # num_executors = 5
+    # num_cores_per_executor = args.cores
+    # os.environ['ZOO_MKL_NUMTHREADS'] = str(num_cores_per_executor)
+    # os.environ['OMP_NUM_THREADS'] = str(num_cores_per_executor)
+    # sc = init_spark_on_yarn(
+    #     hadoop_conf=hadoop_conf_dir,
+    #     conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
+    #     num_executor=num_executors,
+    #     executor_cores=num_cores_per_executor,
+    #     executor_memory="20g",
+    #     driver_memory="20g",
+    #     driver_cores=1,
+    #     spark_conf={"spark.rpc.message.maxSize": "1024",
+    #                 "spark.task.maxFailures":  "1",
+    #                 "spark.scheduler.minRegisteredResourcesRatio": "1",
+    #                 "spark.scheduler.maxRegisteredResourcesWaitingTime": "100s",
+    #                 "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
 
-trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                        download=True, transform=transform)
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=4,
-                                          shuffle=True, num_workers=2)
+    # Data loading code
+    transform = transforms.Compose([
+        transforms.Pad(4),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomCrop(32),
+        transforms.ToTensor()])
+    
+    trainset = torchvision.datasets.CIFAR10(root='/tmp/cifar10', train=True,
+                                            download=True, transform=transform)
+    train_loader = torch.utils.data.DataLoader(trainset, batch_size=100,
+                                              shuffle=True, num_workers=0)
+    
+    valset = torchvision.datasets.CIFAR10(root='/tmp/cifar10', train=False,
+                                           download=True, transform=transforms.ToTensor())
+    val_loader = torch.utils.data.DataLoader(valset, batch_size=100,
+                                         shuffle=False, num_workers=0)
+    # 3x3 convolution
+    def conv3x3(in_channels, out_channels, stride=1):
+        return nn.Conv2d(in_channels, out_channels, kernel_size=3, 
+                         stride=stride, padding=1, bias=False)
+    
+    # Residual block
+    class ResidualBlock(nn.Module):
+        def __init__(self, in_channels, out_channels, stride=1, downsample=None):
+            super(ResidualBlock, self).__init__()
+            self.conv1 = conv3x3(in_channels, out_channels, stride)
+            self.bn1 = nn.BatchNorm2d(out_channels)
+            self.relu = nn.ReLU(inplace=True)
+            self.conv2 = conv3x3(out_channels, out_channels)
+            self.bn2 = nn.BatchNorm2d(out_channels)
+            self.downsample = downsample
+    
+        def forward(self, x):
+            residual = x
+            out = self.conv1(x)
+            out = self.bn1(out)
+            out = self.relu(out)
+            out = self.conv2(out)
+            out = self.bn2(out)
+            if self.downsample:
+                residual = self.downsample(x)
+            out += residual
+            out = self.relu(out)
+            return out
+    
+    # ResNet
+    class ResNet(nn.Module):
+        def __init__(self, block, layers, num_classes=10):
+            super(ResNet, self).__init__()
+            self.in_channels = 16
+            self.conv = conv3x3(3, 16)
+            self.bn = nn.BatchNorm2d(16)
+            self.relu = nn.ReLU(inplace=True)
+            self.layer1 = self.make_layer(block, 16, layers[0])
+            self.layer2 = self.make_layer(block, 32, layers[1], 2)
+            self.layer3 = self.make_layer(block, 64, layers[2], 2)
+            self.avg_pool = nn.AvgPool2d(8)
+            self.fc = nn.Linear(64, num_classes)
+    
+        def make_layer(self, block, out_channels, blocks, stride=1):
+            downsample = None
+            if (stride != 1) or (self.in_channels != out_channels):
+                downsample = nn.Sequential(
+                    conv3x3(self.in_channels, out_channels, stride=stride),
+                    nn.BatchNorm2d(out_channels))
+            layers = []
+            layers.append(block(self.in_channels, out_channels, stride, downsample))
+            self.in_channels = out_channels
+            for i in range(1, blocks):
+                layers.append(block(out_channels, out_channels))
+            return nn.Sequential(*layers)
+    
+        def forward(self, x):
+            out = self.conv(x)
+            out = self.bn(out)
+            out = self.relu(out)
+            out = self.layer1(out)
+            out = self.layer2(out)
+            out = self.layer3(out)
+            out = self.avg_pool(out)
+            out = out.view(out.size(0), -1)
+            out = self.fc(out)
+            return out
 
-testset = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                       download=True, transform=transform)
-testloader = torch.utils.data.DataLoader(testset, batch_size=4,
-                                         shuffle=False, num_workers=2)
+    model = ResNet(ResidualBlock, [2, 2, 2])
+    model.train()
+    criterion = torch.nn.CrossEntropyLoss()
 
-classes = ('plane', 'car', 'bird', 'cat',
-           'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+    lr_schedule = Step(20*500, 1.0/3)
+    adam = Adam(lr=0.001, schedule=lr_schedule)
+    zooModel = TorchNet2.from_pytorch(model)
+    zooCriterion = TorchCriterion2.from_pytorch(criterion)
 
-########################################################################
-# Let us show some of the training images, for fun.
+    estimator = Estimator(zooModel, optim_methods=adam)
+    train_featureSet = FeatureSet.data_loader(train_loader)
+    test_featureSet = FeatureSet.data_loader(val_loader)
+    c = train_featureSet.to_dataset().size()
+    print(c)
+    # estimator.evaluate_minibatch(train_featureSet, [Accuracy()])
+    from bigdl.optim.optimizer import MaxEpoch, EveryEpoch, MaxIteration
+    from zoo.pipeline.api.keras.metrics import Accuracy
+    estimator.train_minibatch(train_featureSet, zooCriterion, end_trigger=MaxEpoch(80), checkpoint_trigger=EveryEpoch(),
+                              validation_set=test_featureSet, validation_method=[Accuracy()])
+    #Estimator.print()
 
-import numpy as np
-
-# get some random training images
-dataiter = iter(trainloader)
-images, labels = dataiter.next()
-
-# print labels
-print(' '.join('%5s' % classes[labels[j]] for j in range(4)))
-
-
-########################################################################
-# 2. Define a Convolutional Neural Network
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Copy the neural network from the Neural Networks section before and modify it to
-# take 3-channel images (instead of 1-channel images as it was defined).
-
-import torch.nn as nn
-import torch.nn.functional as F
-
-
-class Net(nn.Module):
-    def __init__(self):
-        super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(3, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
-
-    def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 5 * 5)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
-
-
-net = Net()
-
-########################################################################
-# 3. Define a Loss function and optimizer
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Let's use a Classification Cross-Entropy loss and SGD with momentum.
-
-import torch.optim as optim
-
-criterion = nn.CrossEntropyLoss()
-
-num_executors = 1
-num_cores_per_executor = 4
-hadoop_conf_dir = os.environ.get('HADOOP_CONF_DIR')
-sc = init_spark_on_local(cores=16, conf={"spark.driver.memory": "10g"})
-#sc = init_spark_on_yarn(
-#   hadoop_conf=hadoop_conf_dir,
-#   conda_name=os.environ["ZOO_CONDA_NAME"],  # The name of the created conda-env
-#   num_executor=num_executors,
-#   executor_cores=num_cores_per_executor,
-#   executor_memory="10g",
-#   driver_memory="10g",
-#   driver_cores=1,
-#   spark_conf={"spark.rpc.message.maxSize": "1024",
-#               "spark.task.maxFailures":  "1",
-#               "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
-
-zooOptim = SGD(learningrate=0.001, momentum=0.9)
-zooModel = TorchNet2.from_pytorch(net)
-zooCriterion = TorchCriterion2(criterion)
-estimator = Estimator(zooModel, optim_methods=zooOptim)
-train_featureSet = FeatureSet.data_loader(trainloader)
-test_featureSet = FeatureSet.data_loader(testloader)
-
-from bigdl.optim.optimizer import MaxEpoch, EveryEpoch, MaxIteration
-from zoo.pipeline.api.keras.metrics import Accuracy
-
-estimator.train_minibatch(train_featureSet, zooCriterion, end_trigger=MaxEpoch(2), checkpoint_trigger=EveryEpoch(),
-                          validation_set=test_featureSet, validation_method=[Accuracy()])
-
+if __name__ == '__main__':
+    main()
