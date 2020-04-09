@@ -22,9 +22,9 @@ import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.zoo.common.PythonInterpreter
 
 
-class TorchCriterion2(private val criterionHolder: Array[Byte])
+class TorchLoss(private val criterionHolder: Array[Byte])
   extends AbstractCriterion[Activity, Activity, Float]() {
-  import TorchCriterion2._
+  import TorchLoss._
 
   protected lazy val loaded = {
     PythonInterpreter.set("criterion_bytes", criterionHolder)
@@ -55,9 +55,9 @@ class TorchCriterion2(private val criterionHolder: Array[Byte])
 
 }
 
-object TorchCriterion2{
-  def apply(modelBytes: Array[Byte]): TorchCriterion2 = {
-    new TorchCriterion2(modelBytes)
+object TorchLoss{
+  def apply(modelBytes: Array[Byte]): TorchLoss = {
+    new TorchLoss(modelBytes)
   }
 }
 

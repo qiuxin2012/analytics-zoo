@@ -93,21 +93,3 @@ class TorchCriterion(Criterion):
         return criterion
 
 
-class TorchCriterion2(Criterion):
-    """
-    TorchCriterion wraps a loss function for distributed inference or training.
-    Use TorchCriterion.from_pytorch to initialize.
-    """
-
-    def __init__(self, criterion_bytes, bigdl_type="float"):
-        """
-        :param bigdl_type:
-        """
-        super(TorchCriterion2, self).__init__(None, bigdl_type, criterion_bytes)
-
-    @staticmethod
-    def from_pytorch(criterion):
-        from pyspark.serializers import CloudPickleSerializer
-        bys = CloudPickleSerializer.dumps(CloudPickleSerializer, criterion)
-        net = TorchCriterion2(bys)
-        return net

@@ -21,7 +21,7 @@ import com.intel.analytics.bigdl.optim._
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.zoo.feature.{DiskFeatureSet, DistributedFeatureSet, FeatureSet}
 import com.intel.analytics.zoo.pipeline.api.keras.models.InternalDistriOptimizer
-import com.intel.analytics.zoo.pipeline.api.net.TorchNet2
+import com.intel.analytics.zoo.pipeline.api.net.TorchModel
 import org.apache.log4j.Logger
 
 import scala.collection.mutable.ArrayBuffer

@@ -16,31 +16,20 @@
 
 package com.intel.analytics.zoo.pipeline.api.net
 
-import java.io.{File, IOException}
-import java.nio.file.{Files, Paths}
 import java.util.UUID
 
-import com.intel.analytics.bigdl.Module
-import com.intel.analytics.bigdl.models.utils.{ModelBroadcast, ModelBroadcastFactory, ModelBroadcastImp}
 import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, Activity}
 import com.intel.analytics.bigdl.tensor.{QuantizedTensor, QuantizedType, Storage, Tensor}
-import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.utils.T
 import com.intel.analytics.zoo.common.PythonInterpreter
 import com.intel.analytics.zoo.feature.PythonLoaderFeatureSet
-import com.intel.analytics.zoo.pipeline.api.Predictable
-import com.intel.analytics.zoo.pipeline.api.net.TorchNet2.TorchModel2Holder
+import com.intel.analytics.zoo.pipeline.api.net.TorchModel.TorchModel2Holder
 import jep.{Jep, NDArray}
-import org.apache.commons.io.FileUtils
-import org.apache.spark.SparkContext
-import org.apache.spark.broadcast.Broadcast
-import org.slf4j.LoggerFactory
 
 import scala.reflect.ClassTag
 //TODO parameter length optional? Train function
-class TorchNet2 private(private val modelHolder: TorchModel2Holder, init_weights: Array[Float])
+class TorchModel private(private val modelHolder: TorchModel2Holder, init_weights: Array[Float])
   extends AbstractModule[Activity, Activity, Float]{
-  import TorchNet2._
+  import TorchModel._
 
   protected lazy val loaded = {
     PythonInterpreter.set("model_bytes", modelHolder.torchBytes)
@@ -126,7 +115,7 @@ class TorchNet2 private(private val modelHolder: TorchModel2Holder, init_weights
         |""".stripMargin
     PythonInterpreter.exec(backwardCode)
     println(s"run backward cost: ${(System.nanoTime() - startTime) / 1e9}")
-    val getWeightCode = 
+    val getWeightCode =
       s"""
         |grads=[]
         |for param in ${getName()}.parameters():
@@ -159,7 +148,7 @@ class TorchNet2 private(private val modelHolder: TorchModel2Holder, init_weights
 
 }
 
-object TorchNet2 {
+object TorchModel {
   private val modelBytesRegistry = new RegistryMap[Array[Byte]]()
 
   @transient
@@ -206,8 +195,8 @@ object TorchNet2 {
 
   }
 
-  def apply(modelBytes: Array[Byte], weights: Array[Float]): TorchNet2 = {
-    new TorchNet2(new TorchModel2Holder(modelBytes, UUID.randomUUID().toString), weights)
+  def apply(modelBytes: Array[Byte], weights: Array[Float]): TorchModel = {
+    new TorchModel(new TorchModel2Holder(modelBytes, UUID.randomUUID().toString), weights)
   }
 }
 

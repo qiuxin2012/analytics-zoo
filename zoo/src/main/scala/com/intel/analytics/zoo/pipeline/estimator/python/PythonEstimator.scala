@@ -30,7 +30,7 @@ import com.intel.analytics.bigdl.mkl.MKL
 import com.intel.analytics.bigdl.python.api.JTensor
 import com.intel.analytics.zoo.common.{PythonInterpreter, PythonZoo}
 import com.intel.analytics.zoo.feature.{FeatureSet, PythonLoaderFeatureSet}
-import com.intel.analytics.zoo.pipeline.api.net.{TorchNet2}
+import com.intel.analytics.zoo.pipeline.api.net.{TorchModel}
 import com.intel.analytics.zoo.pipeline.estimator.Estimator
 import jep.{JepConfig, NamingConventionClassEnquirer, SharedInterpreter}
 import org.apache.spark.SparkContext
@@ -155,7 +155,7 @@ class PythonEstimator[T: ClassTag](implicit ev: TensorNumeric[T]) extends Python
     val bcModel = sc.broadcast(model)
     val bcWeights = sc.broadcast(weights)
     sc.range(1, 10, 1, 1).mapPartitions{iter =>
-      val model = TorchNet2(bcModel.value, bcWeights.value.storage)
+      val model = TorchModel(bcModel.value, bcWeights.value.storage)
       (0 to 32).foreach{i =>
         val jep = PythonInterpreter.getSharedInterpreter()
         val s =
