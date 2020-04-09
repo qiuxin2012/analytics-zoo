@@ -5,8 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
-from zoo.pipeline.api.net.torch_net import TorchNet2
-from zoo.pipeline.api.net.torch_criterion import TorchCriterion2
+from zoo.pipeline.api.net.torch_net import TorchModel, TorchLoss
 from zoo.pipeline.estimator import *
 from bigdl.optim.optimizer import SGD, Adam
 from zoo.common.nncontext import *
@@ -116,8 +115,8 @@ def main():
 
     model.train()
     adam = Adam(1e-2)
-    zooModel = TorchNet2.from_pytorch(model)
-    zooCriterion = TorchCriterion2.from_pytorch(criterion)
+    zooModel = TorchModel.from_pytorch(model)
+    zooCriterion = TorchLoss.from_pytorch(criterion)
     # from bigdl.models.lenet.lenet5 import build_model
     # zooModel = build_model(10)
     # def lossFunc(input, target):

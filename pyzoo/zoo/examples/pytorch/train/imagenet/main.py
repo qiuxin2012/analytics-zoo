@@ -6,8 +6,7 @@ import torchvision
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
-from zoo.pipeline.api.net.torch_net import TorchNet2
-from zoo.pipeline.api.net.torch_criterion import TorchCriterion2
+from zoo.pipeline.api.net.torch_net import TorchModel, TorchLoss
 from zoo.pipeline.estimator import *
 from bigdl.optim.optimizer import SGD, Adam
 from zoo.common.nncontext import *
@@ -167,7 +166,7 @@ def main():
    #                "spark.driver.extraJavaOptions": "-Dbigdl.failure.retryTimes=1"})
     model.train()
     adam = Adam()
-    zooModel = TorchNet2.from_pytorch(model)
+    zooModel = TorchModel.from_pytorch(model)
     # from bigdl.models.lenet.lenet5 import build_model
     # zooModel = build_model(10)
     criterion = nn.CrossEntropyLoss()
@@ -175,7 +174,7 @@ def main():
         return criterion.forward(input, target.flatten().long())
 
     # zooCriterion = TorchCriterion.from_pytorch(lossFunc, [1, 1000], torch.LongTensor([1]))
-    zooCriterion = TorchCriterion2(criterion)
+    zooCriterion = TorchLoss.from_pytorch(criterion)
     # zooCriterion = SparseCategoricalCrossEntropy(zero_based_label=True)
     # from bigdl.nn.criterion import ClassNLLCriterion
     # zooCriterion = ClassNLLCriterion()

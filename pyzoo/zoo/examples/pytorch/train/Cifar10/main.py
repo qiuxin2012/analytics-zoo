@@ -6,8 +6,7 @@ import torchvision
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
-from zoo.pipeline.api.net.torch_net import TorchNet2
-from zoo.pipeline.api.net.torch_criterion import TorchCriterion2
+from zoo.pipeline.api.net.torch_net import TorchModel, TorchLoss
 from zoo.pipeline.estimator import *
 from bigdl.optim.optimizer import SGD, Step
 from zoo.pipeline.api.keras.optimizers import Adam
@@ -188,8 +187,8 @@ def main():
 
     lr_schedule = Step(20*500, 1.0/3)
     adam = Adam(lr=0.001, schedule=lr_schedule)
-    zooModel = TorchNet2.from_pytorch(model)
-    zooCriterion = TorchCriterion2.from_pytorch(criterion)
+    zooModel = TorchModel.from_pytorch(model)
+    zooCriterion = TorchLoss.from_pytorch(criterion)
 
     estimator = Estimator(zooModel, optim_methods=adam)
     train_featureSet = FeatureSet.data_loader(train_loader)
