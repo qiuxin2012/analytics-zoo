@@ -120,24 +120,7 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
     val nodeNumber = EngineRef.getNodeNumber()
     // set a random seed to make sure shuffle is the same in each executor
     val imports = s"""
-                     |def tensor_to_numpy(elements):
-                     |    if isinstance(elements, np.ndarray):
-                     |        return elements
-                     |    elif isinstance(elements, list):
-                     |        return tensor_to_list_of_numpy(elements)
-                     |    elif isinstance(elements, str):
-                     |        return elements
-                     |    else:
-                     |        return elements.numpy()
-                     |    results = []
-                     |    for element in elements:
-                     |        results += tensor_to_list_of_numpy(element)
-                     |    return results
-                     |
-                     |
-                     |def tuple_to_numpy(data):
-                     |    return tuple([tensor_to_numpy(d) for d in data])
-                     |
+                     |from zoo.util.nest import ptensor_to_numpy
                      |import torch
                      |
                      |""".stripMargin
@@ -155,7 +138,7 @@ class PythonFeatureSet[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pytho
     }
 
     FeatureSet.python[MiniBatch[Float]](dataset, getIterator, getNext,
-      "tensor_to_numpy(data[0])", "tensor_to_numpy(data[1])", totalSize, imports)
+      "ptensor_to_numpy(data[0])", "ptensor_to_numpy(data[1])", totalSize, imports)
   }
 
   def size(featureSet: DataSet[MiniBatch[Float]]): Long = {

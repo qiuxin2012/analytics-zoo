@@ -20,6 +20,7 @@ import java.util.UUID
 
 import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, Activity}
 import com.intel.analytics.bigdl.tensor.{QuantizedTensor, QuantizedType, Storage, Tensor}
+import com.intel.analytics.bigdl.utils.T
 import com.intel.analytics.zoo.common.PythonInterpreter
 import com.intel.analytics.zoo.feature.PythonLoaderFeatureSet
 import com.intel.analytics.zoo.pipeline.api.net.TorchModel.TorchModel2Holder
@@ -39,22 +40,7 @@ class TorchModel private(private val modelHolder: TorchModel2Holder, init_weight
          |import torch.nn as nn
          |import torch.nn.functional as F
          |import torchvision
-         |def tensor_to_numpy(elements):
-         |    if isinstance(elements, np.ndarray):
-         |        return elements
-         |    elif isinstance(elements, list):
-         |        return tensor_to_list_of_numpy(elements)
-         |    elif isinstance(elements, str):
-         |        return elements
-         |    else:
-         |        return elements.numpy()
-         |    results = []
-         |    for element in elements:
-         |        results += tensor_to_list_of_numpy(element)
-         |    return results
-         |
-         |def tuple_to_numpy(data):
-         |    return tuple([tensor_to_numpy(d) for d in data])
+         |from zoo.util.nest import ptensor_to_numpy
          |
          |from pyspark.serializers import CloudPickleSerializer
          |by = bytes(b % 256 for b in model_bytes)
@@ -86,9 +72,8 @@ class TorchModel private(private val modelHolder: TorchModel2Holder, init_weight
        |""".stripMargin
 
   override def updateOutput(input: Activity): Activity = {
-    // TODO: parameter from python
+    // TODO: support data from input.
     loaded
-    println(Thread.currentThread())
     val startTime = System.nanoTime()
     val forwardCode = if (train) {
       PythonInterpreter.set("newWeight", weights.storage().array())
@@ -100,8 +85,13 @@ class TorchModel private(private val modelHolder: TorchModel2Holder, init_weight
     }
     PythonInterpreter.exec(forwardCode)
     println(s"run forward cost: ${(System.nanoTime() - startTime) / 1e9}")
-    val outputNd = PythonInterpreter.getValue[NDArray[_]]("tensor_to_numpy(output.data.numpy())")
-    output = PythonLoaderFeatureSet.ndArrayToTensor(outputNd)
+    val outputNd = PythonLoaderFeatureSet.toArrayTensor(
+      PythonInterpreter.getValue[NDArray[_]]("ptensor_to_numpy(output.data)"))
+    if (outputNd.length == 1) {
+      output = outputNd(0)
+    } else {
+      output = T(outputNd)
+    }
     println(s"forward total cost: ${(System.nanoTime() - startTime) / 1e9}")
     output
   }

@@ -390,7 +390,7 @@ object PythonLoaderFeatureSet{
     originRdd
   }
 
-  protected def toArrayTensor(
+  private[zoo] def toArrayTensor(
         data: AnyRef): Array[Tensor[Float]] = {
     data match {
       case ndArray: NDArray[_] =>
