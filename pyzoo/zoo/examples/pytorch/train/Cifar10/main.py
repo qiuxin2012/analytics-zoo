@@ -106,13 +106,13 @@ def main():
     
     trainset = torchvision.datasets.CIFAR10(root='/tmp/cifar10', train=True,
                                             download=True, transform=transform)
-    train_loader = torch.utils.data.DataLoader(trainset, batch_size=100,
-                                              shuffle=True, num_workers=0)
+    # train_loader = torch.utils.data.DataLoader(trainset, batch_size=100,
+    #                                           shuffle=True, num_workers=0)
     
     valset = torchvision.datasets.CIFAR10(root='/tmp/cifar10', train=False,
                                            download=True, transform=transforms.ToTensor())
-    val_loader = torch.utils.data.DataLoader(valset, batch_size=100,
-                                         shuffle=False, num_workers=0)
+    # val_loader = torch.utils.data.DataLoader(valset, batch_size=100,
+    #                                      shuffle=False, num_workers=0)
     # 3x3 convolution
     def conv3x3(in_channels, out_channels, stride=1):
         return nn.Conv2d(in_channels, out_channels, kernel_size=3, 
@@ -191,8 +191,8 @@ def main():
     zooCriterion = TorchLoss.from_pytorch(criterion)
 
     estimator = Estimator(zooModel, optim_methods=adam)
-    train_featureSet = FeatureSet.data_loader(train_loader)
-    test_featureSet = FeatureSet.data_loader(val_loader)
+    train_featureSet = FeatureSet.pytorch_dataset(trainset, batch_size=100, shuffle=True)
+    test_featureSet = FeatureSet.pytorch_dataset(valset, batch_size=100, shuffle=False)
     c = train_featureSet.to_dataset().size()
     print(c)
     # estimator.evaluate_minibatch(train_featureSet, [Accuracy()])

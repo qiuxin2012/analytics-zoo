@@ -356,13 +356,23 @@ object PythonLoaderFeatureSet{
       PythonInterpreter.exec(preimports)
       PythonInterpreter.set("pyjarray", bcDataSet.value)
 
+      val localLoaderName = getLocalLoader(loaderName)
+      // when nodeNumber == 1, we use the origin dataset.
+      // when nodeNumber > 1, we split origin dataset.
+      val pytorchSelect = if(nodeNumber == 1) {
+        ""
+      } else {
+        s"${localLoaderName}.select(${partId})"
+      }
+
       val load = s"""
         |by${partId} = bytes(b % 256 for b in pyjarray)
         |func${partId} = CloudPickleSerializer.loads(CloudPickleSerializer, by${partId})
         |if(callable(func${partId})):
-        |  ${getLocalLoader(loaderName)} = func${partId}().shard(${nodeNumber}, ${partId})
-        |else:
-        |  ${getLocalLoader(loaderName)} = func${partId}
+        |  ${localLoaderName} = func${partId}().shard(${nodeNumber}, ${partId})
+        |else:  #pytorch dataset
+        |  ${localLoaderName} = func${partId}
+        |  ${pytorchSelect}
         |""".stripMargin
 
       PythonInterpreter.exec(load)
@@ -371,7 +381,7 @@ object PythonLoaderFeatureSet{
 
   }
 
-  protected val cachedRdd: RDD[Int] = createCachedRdd()
+  protected lazy val cachedRdd: RDD[Int] = createCachedRdd()
   protected def createCachedRdd(): RDD[Int] = {
     val sc = SparkContext.getOrCreate()
     val nodeNumber = EngineRef.getNodeNumber()
