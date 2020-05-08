@@ -37,12 +37,17 @@ if sys.version >= '3':
 
 class TorchModel(Layer):
     """
-    TorchNet wraps a TorchScript model as a single layer, thus the Pytorch model can be used for
-    distributed inference or training.
-    :param path: path to the TorchScript model.
+    TorchModel wraps a pytorch model as a single layer, thus this Pytorch model
+    can be used for distributed inference or training.
     """
 
     def __init__(self, module_bytes, weights, bigdl_type="float"):
+        """
+        Create TorchModel, user should use from_pytorch to init TorchModel.
+        :param module_bytes: bytes pickled from pytorch model.
+        :param weights: model weights, a numpy array
+        :param bigdl_type:
+        """
         weights = JTensor.from_ndarray(weights)
         self.value = callZooFunc(
             bigdl_type, self.jvm_class_constructor(), module_bytes, weights)
@@ -50,6 +55,11 @@ class TorchModel(Layer):
 
     @staticmethod
     def from_pytorch(model):
+        """
+        Create TorchModel from pytorch's model.
+        :param model: pytorch model
+        :return: A TorchModel wrapped model.
+        """
         weights=[]
         for param in model.parameters():
             weights.append(param.view(-1))
@@ -61,21 +71,37 @@ class TorchModel(Layer):
 
 class TorchLoss(Criterion):
     """
-    TorchCriterion wraps a loss function for distributed inference or training.
-    Use TorchCriterion.from_pytorch to initialize.
+    TorchLoss wraps a pytorch loss function for distributed inference or training.
+    Use TorchLoss.from_pytorch to initialize.
+    Should be used with TorchModel.
     """
 
     def __init__(self, criterion_bytes, bigdl_type="float"):
         """
+        :param criterion_bytes: bytes pickled from pytorch criterion
         :param bigdl_type:
         """
         super(TorchLoss, self).__init__(None, bigdl_type, criterion_bytes)
 
     @staticmethod
     def from_pytorch(criterion):
+        """
+        Create TorchModel from pytorch's model.
+        :param criterion: pytorch loss.
+        :return: A TorchModel wrapped model.
+        :return:
+        """
         bys = CloudPickleSerializer.dumps(CloudPickleSerializer, criterion)
         net = TorchLoss(bys)
         return net
+
+    @staticmethod
+    def empty():
+        """
+        A empty Loss, used in Estimator when Loss is already computed in TorchModel.
+        :return:
+        """
+        return TorchLoss(bytearray())
 
 
 class TorchNet(Layer):

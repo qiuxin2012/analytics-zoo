@@ -15,32 +15,32 @@
  */
 package com.intel.analytics.zoo.pipeline.api.net
 
-import java.util.UUID
-
 import com.intel.analytics.bigdl.nn.abstractnn.{AbstractCriterion, Activity}
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.zoo.common.PythonInterpreter
 
-
 class TorchLoss(private val criterionHolder: Array[Byte])
   extends AbstractCriterion[Activity, Activity, Float]() {
-  import TorchLoss._
-
-  protected lazy val loaded = {
-    PythonInterpreter.set("criterion_bytes", criterionHolder)
-    val loadModelCode =
-      s"""
-         |from pyspark.serializers import CloudPickleSerializer
-         |c_by = bytes(b % 256 for b in criterion_bytes)
-         |${name} = CloudPickleSerializer.loads(CloudPickleSerializer, c_by)
-         |""".stripMargin
-    PythonInterpreter.exec(loadModelCode)
-    true
+  protected lazy val loaded = if (criterionHolder.length == 0) {
+    false
+  } else {
+      PythonInterpreter.set("criterion_bytes", criterionHolder)
+      val loadModelCode =
+        s"""
+           |from pyspark.serializers import CloudPickleSerializer
+           |c_by = bytes(b % 256 for b in criterion_bytes)
+           |${name} = CloudPickleSerializer.loads(CloudPickleSerializer, c_by)
+           |""".stripMargin
+      PythonInterpreter.exec(loadModelCode)
+      true
   }
 
   override def updateOutput(input: Activity, target: Activity): Float = {
-    loaded
-    PythonInterpreter.exec(s"loss = ${name}(output, target)")
+    if (loaded) {
+      PythonInterpreter.exec(s"loss = ${name}(output, target)")
+    } else {
+      PythonInterpreter.exec(s"loss = output")
+    }
     output = PythonInterpreter.getValue("loss.item()").asInstanceOf[Double].toFloat
     output
   }

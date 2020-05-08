@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 import six
+import numpy as np
 
 
 def flatten(seq):
@@ -32,6 +33,25 @@ def flatten(seq):
         return [seq[v] for v in sorted_keys]
 
     return [seq]
+
+
+def tensor_to_numpy(elements):
+    if isinstance(elements, np.ndarray):
+        return elements
+    elif isinstance(elements, list):
+        return tensor_to_list_of_numpy(elements)
+    elif isinstance(elements, str):
+        return elements
+    else:
+        return elements.numpy()
+    results = []
+    for element in elements:
+        results += tensor_to_list_of_numpy(element)
+    return results
+
+
+def tuple_to_numpy(data):
+    return tuple([tensor_to_numpy(d) for d in data])
 
 
 def pack_sequence_as(structure, flat_sequence):

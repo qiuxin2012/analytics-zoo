@@ -26,8 +26,14 @@ import com.intel.analytics.zoo.pipeline.api.net.TorchModel.TorchModel2Holder
 import jep.{Jep, NDArray}
 
 import scala.reflect.ClassTag
-//TODO parameter length optional? Train function
-class TorchModel private(private val modelHolder: TorchModel2Holder, init_weights: Array[Float])
+
+/***
+ * TorchModel wraps a pytorch model as a single layer, thus this Pytorch model
+ * can be used for distributed inference or training.
+ * @param modelHolder model bytes
+ * @param initWeights initial weights
+ */
+class TorchModel private(private val modelHolder: TorchModel2Holder, initWeights: Array[Float])
   extends AbstractModule[Activity, Activity, Float]{
   import TorchModel._
 
@@ -64,13 +70,14 @@ class TorchModel private(private val modelHolder: TorchModel2Holder, init_weight
     true
   }
 
-  val weights: Tensor[Float] = Tensor[Float](Storage[Float](init_weights))
+  val weights: Tensor[Float] = Tensor[Float](Storage[Float](initWeights))
   val gradients: Tensor[Float] = Tensor[Float](weights.size())
 
   override def parameters(): (Array[Tensor[Float]], Array[Tensor[Float]]) = {
     (Array(weights), Array(gradients))
   }
 
+  // TODO: this take about 1 second while running resnet50.
   val setWeightCode =
     s"""
         |w = torch.Tensor(list(newWeight))
@@ -86,23 +93,17 @@ class TorchModel private(private val modelHolder: TorchModel2Holder, init_weight
        |""".stripMargin
 
   override def updateOutput(input: Activity): Activity = {
-    // TODO: parameter from python
     loaded
-    println(Thread.currentThread())
-    val startTime = System.nanoTime()
     val forwardCode = if (train) {
       PythonInterpreter.set("newWeight", weights.storage().array())
       PythonInterpreter.exec(setWeightCode)
-      println(s"setWeight time is ${(System.nanoTime() - startTime) / 1e9}")
       this.forwardCode
     } else {
       this.forwardCode
     }
     PythonInterpreter.exec(forwardCode)
-    println(s"run forward cost: ${(System.nanoTime() - startTime) / 1e9}")
     val outputNd = PythonInterpreter.getValue[NDArray[_]]("tensor_to_numpy(output.data.numpy())")
     output = PythonLoaderFeatureSet.ndArrayToTensor(outputNd)
-    println(s"forward total cost: ${(System.nanoTime() - startTime) / 1e9}")
     output
   }
 
@@ -114,7 +115,6 @@ class TorchModel private(private val modelHolder: TorchModel2Holder, init_weight
         |loss.backward(retain_graph=True)
         |""".stripMargin
     PythonInterpreter.exec(backwardCode)
-    println(s"run backward cost: ${(System.nanoTime() - startTime) / 1e9}")
     val getWeightCode =
       s"""
         |grads=[]
