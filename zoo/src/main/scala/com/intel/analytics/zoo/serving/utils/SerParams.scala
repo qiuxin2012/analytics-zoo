@@ -18,6 +18,8 @@ package com.intel.analytics.zoo.serving.utils
 
 import java.text.SimpleDateFormat
 
+import com.intel.analytics.zoo.pipeline.inference.InferenceModel
+
 class SerParams(helper: ClusterServingHelper, loadModel: Boolean = true) extends Serializable {
   var redisHost = helper.redisHost
   var redisPort = helper.redisPort.toInt
@@ -25,15 +27,17 @@ class SerParams(helper: ClusterServingHelper, loadModel: Boolean = true) extends
   val filter = helper.filter
   val chwFlag = helper.chwFlag
   val inferenceMode = helper.inferenceMode
-  val dataShape = helper.dataShape
+//  val dataShape = helper.dataShape
   val modelType = helper.modelType
   val modelDir = helper.modelDir
   val lastModified = FileUtils.getLastModified(helper.modelDir)
   val sdf = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss")
+  val redisSecureEnabled = helper.redisSecureEnabled
+  val redisSecureTrustStorePath = helper.redisSecureTrustStorePath
+  val redisSecureTrustStorePassword = helper.redisSecureTrustStorePassword
   println(s"loading params, time is ${sdf.format(lastModified)}")
-  var model = if (loadModel) {
-    helper.loadInferenceModel()
-  } else {
-    null
-  }
+
+  val resize = helper.resize
+
+  var model: InferenceModel = null
 }
