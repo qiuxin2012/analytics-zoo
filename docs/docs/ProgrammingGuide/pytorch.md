@@ -16,7 +16,7 @@ Two wrappers are defined in Analytics Zoo for Pytorch:
 User may create a TorchModel by providing a Pytorch model, e.g.
 ```python
     from zoo.pipeline.api.torch import TorchModel
-    TorchModel.from_pytorch(torchvision.models.resnet18(pretrained=True).eval(), [1, 3, 224, 224])
+    TorchModel.from_pytorch(torchvision.models.resnet18(pretrained=True))
 ```
 The above line creates TorchNet wrapping a ResNet model, and user can use the TorchNet for
 training or inference with Analytics Zoo.
