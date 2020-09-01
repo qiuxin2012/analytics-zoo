@@ -18,6 +18,7 @@ package com.intel.analytics.zoo.pipeline.api.net
 
 import java.util
 import java.util.UUID
+import java.io._
 
 import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, Activity}
 import com.intel.analytics.bigdl.tensor.{QuantizedTensor, QuantizedType, Storage, Tensor}
@@ -47,9 +48,13 @@ class TorchModel private(private val modelHolder: TorchModel2Holder, init_weight
          |from zoo.util.nest import ptensor_to_numpy
          |from zoo.pipeline.api.torch.utils import trainable_param
          |
+         |import pickle
          |from pyspark.serializers import CloudPickleSerializer
          |by = bytes(b % 256 for b in model_bytes)
-         |${getName()} = CloudPickleSerializer.loads(CloudPickleSerializer, by)
+         |try:
+         |    ${getName()} = CloudPickleSerializer.loads(CloudPickleSerializer, by)
+         |else:
+         |    ${getName()} = pickle.loads(by, encoding="bytes")
          |""".stripMargin
     PythonInterpreter.exec(loadModelCode)
     if (extraParams.length != 0) {
@@ -280,5 +285,17 @@ object TorchModel {
   def apply(modelBytes: Array[Byte], weights: Array[Float]): TorchModel = {
     new TorchModel(new TorchModel2Holder(modelBytes, UUID.randomUUID().toString), weights)
   }
+
+  def loadModel(Path: String): TorchModel = {
+    val file = new File(Path)
+    val in = new FileInputStream(file)
+    val bys = new Array[Byte](file.length.toInt)
+    in.read(bys)
+    in.close()
+    val weights = new Array[Float](0)
+    apply(bys, weights)
+  }
 }
+
+
 
