@@ -18,7 +18,7 @@ package com.intel.analytics.zoo.pipeline.api.net
 
 import java.util
 import java.util.UUID
-import java.io._
+import java.nio.file.{Files, Paths}
 
 import com.intel.analytics.bigdl.nn.abstractnn.{AbstractModule, Activity}
 import com.intel.analytics.bigdl.tensor.{QuantizedTensor, QuantizedType, Storage, Tensor}
@@ -53,7 +53,7 @@ class TorchModel private(private val modelHolder: TorchModel2Holder, init_weight
          |by = bytes(b % 256 for b in model_bytes)
          |try:
          |    ${getName()} = CloudPickleSerializer.loads(CloudPickleSerializer, by)
-         |else:
+         |except:
          |    ${getName()} = pickle.loads(by, encoding="bytes")
          |""".stripMargin
     PythonInterpreter.exec(loadModelCode)
@@ -287,11 +287,7 @@ object TorchModel {
   }
 
   def loadModel(Path: String): TorchModel = {
-    val file = new File(Path)
-    val in = new FileInputStream(file)
-    val bys = new Array[Byte](file.length.toInt)
-    in.read(bys)
-    in.close()
+    val bys = Files.readAllBytes(Paths.get(Path))
     val weights = new Array[Float](0)
     apply(bys, weights)
   }
