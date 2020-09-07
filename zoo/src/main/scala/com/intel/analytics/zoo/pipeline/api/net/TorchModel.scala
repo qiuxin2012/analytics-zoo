@@ -53,7 +53,7 @@ class TorchModel private(private val modelHolder: TorchModel2Holder, init_weight
          |by = bytes(b % 256 for b in model_bytes)
          |try:
          |    ${getName()} = CloudPickleSerializer.loads(CloudPickleSerializer, by)
-         |else:
+         |except:
          |    ${getName()} = pickle.loads(by, encoding="bytes")
          |""".stripMargin
     PythonInterpreter.exec(loadModelCode)
