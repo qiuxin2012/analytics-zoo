@@ -45,16 +45,15 @@ class TorchModel private(private val modelHolder: TorchModel2Holder, init_weight
          |import torch.nn as nn
          |import torch.nn.functional as F
          |import torchvision
+         |import io
          |from zoo.util.nest import ptensor_to_numpy
          |from zoo.pipeline.api.torch.utils import trainable_param
+         |from zoo.pipeline.api.torch import zoo_pickle_module
          |
          |import pickle
          |from pyspark.serializers import CloudPickleSerializer
          |by = bytes(b % 256 for b in model_bytes)
-         |try:
-         |    ${getName()} = CloudPickleSerializer.loads(CloudPickleSerializer, by)
-         |except:
-         |    ${getName()} = pickle.loads(by, encoding="bytes")
+         |${getName()} = torch.load(io.BytesIO(by), pickle_module=zoo_pickle_module)
          |""".stripMargin
     PythonInterpreter.exec(loadModelCode)
     if (extraParams.length != 0) {
@@ -107,7 +106,7 @@ class TorchModel private(private val modelHolder: TorchModel2Holder, init_weight
       PythonInterpreter.exec("input = torch.Tensor(nd_input)")
     }
 
-    val forwardCode = if (train) {
+    val forwardCode = if (train && weights.nElement() > 0) {
       PythonInterpreter.set("newWeight", new NDArray[Array[Float]](weights.storage().array()))
       PythonInterpreter.exec(setWeightCode)
       println(s"setWeight time is ${(System.nanoTime() - startTime) / 1e9}")
@@ -182,8 +181,10 @@ class TorchModel private(private val modelHolder: TorchModel2Holder, init_weight
   override def evaluate(): this.type = {
     super.evaluate()
     load
-    PythonInterpreter.set("newWeight", new NDArray[Array[Float]](weights.storage().array()))
-    PythonInterpreter.exec(setWeightCode)
+    if (weights.nElement() != 0) {
+      PythonInterpreter.set("newWeight", new NDArray[Array[Float]](weights.storage().array()))
+      PythonInterpreter.exec(setWeightCode)
+    }
     PythonInterpreter.exec(s"${getName()}.eval()")
     this
   }
@@ -229,6 +230,7 @@ class TorchModel private(private val modelHolder: TorchModel2Holder, init_weight
   override def training(): this.type = {
     super.training()
     load
+    require(weights.nElement() > 0, "We can't train an inference-only model, weights is empty.")
     PythonInterpreter.exec(s"${getName()}.train()")
     this
   }
@@ -286,6 +288,13 @@ object TorchModel {
     new TorchModel(new TorchModel2Holder(modelBytes, UUID.randomUUID().toString), weights)
   }
 
+  /**
+   * Get an inference-only model from a pytorch model.
+   * This model file should be save by `torch.save` with zoo.pipeline.api.torch.zoo_pickle_module.
+   * Like: torch.save(model, "/tmp/xxx.pt", pickle_module=zoo_pickle_module)
+   * @param Path model file
+   * @return TorchModel
+   */
   def loadModel(Path: String): TorchModel = {
     val bys = Files.readAllBytes(Paths.get(Path))
     val weights = new Array[Float](0)
