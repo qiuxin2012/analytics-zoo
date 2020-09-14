@@ -23,7 +23,7 @@ conda install pytorch torchvision -c pytorch #command for macOS
 ```
 
 ## Prepare Dataset
-You need to sign up and download [ILSVRC2012_img_train.tar](http://image-net.org/download-images) and [ILSVRC2012_img_val.tar](http://image-net.org/download-images) manually, and unzip to the folder named `imagenet/train` and `imagenet/test`. (you should put the data to all driver and executor nodes).
+You need to sign up and download [ILSVRC2012_img_train.tar](http://image-net.org/download-images) and [ILSVRC2012_img_val.tar](http://image-net.org/download-images) manually, and unzip to the folder named `imagenet/train` and `imagenet/test`, (you should put the data to all driver and executor nodes).
 For example, you can set data to `/tmp/imagenet` if your structure is like this:
 ```
 /tmp/imagenet$ tree
