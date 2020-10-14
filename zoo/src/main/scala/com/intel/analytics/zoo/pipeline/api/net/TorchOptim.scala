@@ -114,9 +114,11 @@ class TorchOptim[@specialized(Float, Double) T: ClassTag](
       PythonInterpreter.exec(initCode)
       init = true
     }
-    if (optimType == LrSchedule && lastEpoch < epoch) {
-      PythonInterpreter.exec(lrStepCode)
+    if (optimType == LrSchedule) { // && lastEpoch < epoch) {
+//      PythonInterpreter.exec(lrStepCode)
+      PythonInterpreter.exec(s"${name}.step(${epoch})")
     }
+    println(getHyperParameter())
     PythonInterpreter.set(gradientName, new NDArray[Array[Float]](
       dfdx.toTensor[Float].storage().array()))
     PythonInterpreter.exec(stepCode)
@@ -174,7 +176,7 @@ object TorchOptim{
     new TorchOptim[T](optimBytes)
   }
 
-  protected[net] def getEpoch[T: ClassTag](optim: TorchOptim[T]): Int = {
+  protected[net] def getEpoch[T: ClassTag](optim: OptimMethod[T]): Int = {
     // BigDL's epoch starts from 1, while torch starts from 0.
     InternalOptimizerUtil.getStateFromOptiMethod(optim)[Int]("epoch") - 1
   }
