@@ -26,7 +26,7 @@ if find_spec('jep') is None:
 
 class TorchOptim(OptimMethod):
     """
-    TorchOptim wraps a torch optimizer for distributed inference or training.
+    TorchOptim wraps a torch optimizer or a learning rate scheduler for distributed training.
     """
 
     def __init__(self, optim_bytes, decayType, bigdl_type="float"):
@@ -51,3 +51,25 @@ class TorchOptim(OptimMethod):
         torch.save(optim, bys, pickle_module=zoo_pickle_module)
         zoo_optim = TorchOptim(bys.getvalue(), decayType)
         return zoo_optim
+
+
+class MultiStepTorchOptim(OptimMethod):
+    """
+    MultiStepTorchOptim wraps few TorchOptims for distributed training.
+    """
+
+    def __init__(self, torch_optims, end_epochs, bigdl_type="float"):
+        """
+        :param bigdl_type:
+        """
+        super(MultiStepTorchOptim, self).__init__(None, bigdl_type, torch_optims, end_epochs)
+
+    @staticmethod
+    def from_torch_optims(torch_optims, end_epochs):
+        """
+        :param torch_optims: a list of TorchOptim
+        :param end_epochs: end epochs of each TorchOptim
+        """
+        zoo_optim = MultiStepTorchOptim(torch_optims, end_epochs)
+        return zoo_optim
+

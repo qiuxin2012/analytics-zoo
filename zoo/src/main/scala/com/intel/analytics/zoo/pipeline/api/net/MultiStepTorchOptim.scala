@@ -76,8 +76,8 @@ class MultiStepTorchOptim[@specialized(Float, Double) T: ClassTag](
 
 object MultiStepTorchOptim{
   def apply[T: ClassTag](
-      torchBytes: Array[Array[Byte]],
-      epochs: Array[Int])(implicit ev: TensorNumeric[T]): MultiStepTorchOptim[T] = {
-    new MultiStepTorchOptim[T](torchBytes.map(TorchOptim[T]), epochs)
+        torchOptims: Array[TorchOptim[T]],
+        epochs: Array[Int])(implicit ev: TensorNumeric[T]): MultiStepTorchOptim[T] = {
+    new MultiStepTorchOptim[T](torchOptims, epochs)
   }
 }
