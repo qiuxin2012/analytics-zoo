@@ -27,11 +27,16 @@ class MultiStepTorchOptim[@specialized(Float, Double) T: ClassTag](
         optimEpoch = currentEpoch - endEpochs.last
       } else if (currentEpoch >= endEpochs(i)) {
         currentOptim = i + 1
-        optimEpoch = currentEpoch - endEpochs(i - 1)
+        optimEpoch = if (i > 0) {
+          currentEpoch - endEpochs(i - 1)
+        } else {
+          currentEpoch
+        }
       }
     }
     InternalOptimizerUtil.getStateFromOptiMethod(torchOptims(currentOptim))
-      .update("Epoch", optimEpoch)
+      .update("epoch", optimEpoch)
+    torchOptims(currentOptim).updateHyperParameter()
     torchOptims(currentOptim).optimize(feval, parameter)
   }
 

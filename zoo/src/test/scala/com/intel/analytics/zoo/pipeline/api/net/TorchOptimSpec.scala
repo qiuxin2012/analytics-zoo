@@ -221,4 +221,50 @@ class TorchOptimSpec extends ZooSpecHelper{
     weight should be (Tensor[Float](Array(0.9559f, 0.9149f, 0.8739f, 0.8329f), Array(4)))
 
   }
+
+  "MultiStepTorchOptim" should "work without error" in {
+    ifskipTest()
+    val tmpname = createTmpFile().getAbsolutePath()
+    val tmpname2 = createTmpFile().getAbsolutePath()
+    val code = lenet +
+      s"""
+         |model = LeNet()
+         |sgd = torch.optim.SGD(model.parameters(), lr=0.1)
+         |elr1 = torch.optim.lr_scheduler.ExponentialLR(sgd, gamma=0.1)
+         |elr2 = torch.optim.lr_scheduler.ExponentialLR(sgd, gamma=0.5)
+         |torch.save(elr1, "$tmpname", pickle_module=zoo_pickle_module)
+         |torch.save(elr2, "$tmpname2", pickle_module=zoo_pickle_module)
+         |""".stripMargin
+    PythonInterpreter.exec(code)
+    val bys = Files.readAllBytes(Paths.get(tmpname))
+    val bys2 = Files.readAllBytes(Paths.get(tmpname))
+    val elr1 = TorchOptim[Float](bys, EpochDecay)
+    val elr2 = TorchOptim[Float](bys2, EpochDecay)
+
+    val torchOptim = MultiStepTorchOptim(Array(elr1, elr2), epochs = Array(5))
+
+    val weight = Tensor[Float](4).fill(1)
+    val gradient = Tensor[Float](Array(0.1f, 0.2f, 0.3f, 0.4f), Array(4))
+    torchOptim.getLearningRate() should be (0.1)
+    torchOptim.optimize(_ => (1f, gradient), weight)
+    weight should be (Tensor[Float](Array(0.99f, 0.98f, 0.97f, 0.96f), Array(4)))
+    val state = getStateFromOptiMethod(torchOptim)
+
+    for (i <- 2 to 5) {
+      state("epoch") = i
+      torchOptim.optimize(_ => (1f, gradient), weight)
+      torchOptim.getLearningRate() should be (0.1 * math.pow(0.1, i - 1) +- 1e-10)
+      println(s"${i}: ${torchOptim.getLearningRate()}")
+    }
+//    weight should be (Tensor[Float](Array(0.959f, 0.918f, 0.877f, 0.836f), Array(4)))
+
+    val gradient2 = Tensor[Float](Array(0.1f, 0.1f, 0.1f, 0.1f), Array(4))
+    for (i <- 6 to 9) {
+      state("epoch") = i
+      torchOptim.optimize(_ => (1f, gradient2), weight)
+      torchOptim.getLearningRate() should be (0.1 * math.pow(0.5, i - 6) +- 1e-10)
+      println(s"${i}: ${torchOptim.getLearningRate()}")
+    }
+//    weight should be (Tensor[Float](Array(0.9559f, 0.9149f, 0.8739f, 0.8329f), Array(4)))
+  }
 }

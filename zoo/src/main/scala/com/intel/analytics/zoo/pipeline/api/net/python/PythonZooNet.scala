@@ -189,7 +189,7 @@ class PythonZooNet[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonZoo
   }
 
   def createMultiStepTorchOptim(
-        optims: JList[TorchOptim],
+        optims: JList[TorchOptim[T]],
         endEpochs: JList[Int]): MultiStepTorchOptim[T] = {
     MultiStepTorchOptim(
       optims.asScala.toArray,
