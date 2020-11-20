@@ -11,6 +11,14 @@
             <outputDirectory>/</outputDirectory>
             <useProjectArtifact>true</useProjectArtifact>
             <unpack>true</unpack>
+            <includes>
+                <include>com.intel.analytics.zoo:*:jar</include>
+            </includes>
+        </dependencySet>
+        <dependencySet>
+            <outputDirectory>/</outputDirectory>
+            <useProjectArtifact>true</useProjectArtifact>
+            <unpack>true</unpack>
             <scope>provided</scope>
         </dependencySet>
         <dependencySet>
@@ -21,3 +29,15 @@
         </dependencySet>
     </dependencySets>
 </assembly>
+<!--
+                <include>com.intel.analytics.zoo:zoo-core-dist-all:jar</include>
+        <dependencySet>
+            <outputDirectory>/</outputDirectory>
+            <useProjectAttachments>true</useProjectAttachments>
+            <unpack>true</unpack>
+            <includes>
+                <include>com.intel.analytics.zoo:zoo-core-dist-all:jar</include>
+            </includes>
+            <scope>compile</scope>
+        </dependencySet>
+-->
