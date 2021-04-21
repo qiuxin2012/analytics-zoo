@@ -98,7 +98,7 @@ cd ppml/trusted-big-data-ml/scala/docker-graphene
 ./build-docker-image.sh
 ```
 
-#### Step 1: Single-Node Trusted Big Data Analytics and ML Platform
+#### Single-Node Trusted Big Data Analytics and ML Platform
 
 Enter `analytics-zoo/ppml/trusted-big-data-ml/scala/docker-graphene` dir. Start Spark service with this command
 
@@ -136,9 +136,9 @@ The result should look like:
 
 >   Pi is roughly 3.1422957114785572
 
-##### **Example 2: Analytics Zoo model training on Graphene-SGX**
+##### **Example 2: BigDL model training on Graphene-SGX**
 
-This example is 
+This example is about how to train a lenet model using BigDL on Graphene-SGX. Before you run the following script, you should download the MNIST Data from [here](http://yann.lecun.com/exdb/mnist/). Use `gzip -d` to unzip all the downloaded files(train-images-idx3-ubyte.gz, train-labels-idx1-ubyte.gz, t10k-images-idx3-ubyte.gz, t10k-labels-idx1-ubyte.gz) and put them into folder `/ppml/trusted-big-data-ml/work/data`. Then run the following script:  
 
 ```bash
 bash start-spark-local-train-sgx.sh
@@ -159,8 +159,7 @@ The result should look like: <br>
 >   ############# ModuleLoader.saveToFile saveWeightsToFile end, used 842543 ms[P1182:T2:java] ---- end time: 1985297 ms return from shim_write(...) = 0x4b <br>
 >   ############# model saved[P1182:T2:java] ---- end time: 1985297 ms return from shim_write(...) = 0x19 <br>
 
-
-#### Step 2: Distributed Trusted Big Data Analytics and ML Platform
+#### Distributed Trusted Big Data Analytics and ML Platform
 
 
 ## Trusted Realtime Compute and ML
